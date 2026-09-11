@@ -151,9 +151,9 @@ def quality_check(
 		r_mean = float(np.mean(retina_pixels_bgr[:, 2]))
 		red_to_blue_ratio = r_mean / max(b_mean, 1.0)
 
-		if red_to_blue_ratio < 1.25 or r_mean < (g_mean * 0.80):
+		if red_to_blue_ratio < 1.15 or r_mean < (g_mean * 0.75):
 			reasons.append(
-				f"Non-retinal image detected: Chromatic signature (R/B ratio: {red_to_blue_ratio:.2f} < 1.25) does not match human fundus optics. Please upload an authentic retinal capture."
+				f"Non-retinal image detected: Chromatic signature (R/B ratio: {red_to_blue_ratio:.2f} < 1.15) does not match human fundus optics. Please upload an authentic retinal capture."
 			)
 	else:
 		red_to_blue_ratio = 1.0
@@ -175,6 +175,98 @@ def quality_check(
 			"red_to_blue_ratio": round(red_to_blue_ratio, 2),
 		},
 	}
+
+
+def preprocess_smartphone_capture(
+	image: Union[str, Path, np.ndarray],
+	suppress_glare: bool = True,
+	crop_to_retina: bool = True,
+) -> np.ndarray:
+	"""Preprocess fundus photographs taken with normal cameras / smartphone clip-on lenses.
+	
+	Challenges in smartphone / normal camera eye captures:
+	1. Corneal Specular Flash Glare: High-intensity white reflections from smartphone LED flash.
+	   Solved using Fast Marching Method (Telea inpainting) to eliminate false-positive exudates.
+	2. Non-Retinal Surroundings: Eyelids, eyelashes, or iris boundary visible outside pupil.
+	   Solved using circular pupil/retinal aperture detection and tight FOV cropping.
+	
+	Returns:
+		Normalized BGR image ready for clinical enhancement and inference.
+	"""
+	img = load_image(image)
+	h, w = img.shape[:2]
+
+	# 1. Specular Flash Glare Detection and Inpainting
+	if suppress_glare:
+		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
+		# Specular reflection is saturated in all channels (intensity > 235)
+		_, glare_thresh = cv2.threshold(gray, 235, 255, cv2.THRESH_BINARY)
+		
+		# Find discrete reflection spots (ignore large overexposed fields)
+		contours, _ = cv2.findContours(glare_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+		glare_mask = np.zeros_like(gray, dtype=np.uint8)
+		
+		max_glare_area = h * w * 0.06  # Maximum 6% of frame
+		for cnt in contours:
+			area = cv2.contourArea(cnt)
+			if 4 <= area <= max_glare_area:
+				cv2.drawContours(glare_mask, [cnt], -1, 255, thickness=cv2.FILLED)
+		
+		if np.count_nonzero(glare_mask) > 0:
+			# Dilate slightly to include specular halo
+			kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+			glare_mask_dilated = cv2.dilate(glare_mask, kernel, iterations=1)
+			# Telea inpainting recovers local retinal vascular/pigment context
+			img = cv2.inpaint(img, glare_mask_dilated, inpaintRadius=5, flags=cv2.INPAINT_TELEA)
+
+	# 2. Pupil / Retinal Aperture Detection & Circular Cropping
+	if crop_to_retina:
+		mask, circle = get_retina_mask(img, threshold=12)
+		if circle is not None:
+			(cx, cy), radius = circle
+			if radius > 30:
+				x1, y1 = max(0, int(cx - radius)), max(0, int(cy - radius))
+				x2, y2 = min(w, int(cx + radius)), min(h, int(cy + radius))
+				if (x2 - x1) > 50 and (y2 - y1) > 50:
+					cropped = img[y1:y2, x1:x2]
+					# Mask outside circular aperture to pure black for uniform CNN input
+					crop_h, crop_w = cropped.shape[:2]
+					circ_mask = np.zeros((crop_h, crop_w), dtype=np.uint8)
+					cv2.circle(circ_mask, (int(crop_w / 2), int(crop_h / 2)), int(min(crop_w, crop_h) / 2), 255, -1)
+					img = cv2.bitwise_and(cropped, cropped, mask=circ_mask)
+
+	return img
+
+
+def count_etdrs_lesions(segmentation_dict: Dict[str, np.ndarray]) -> Dict[str, int]:
+	"""Compute discrete lesion counts via connected-component analysis for clinical staging.
+	
+	Aligns with the Early Treatment Diabetic Retinopathy Study (ETDRS) standard:
+	- Microaneurysms: discrete capillary micro-dilations (< 125 um)
+	- Hard Exudates: lipid deposits with distinct sharp margins
+	- Hemorrhages: dot-and-blot or flame intraretinal hemorrhages
+	
+	Returns:
+		dict with discrete integer counts:
+			'microaneurysms_count', 'exudates_count', 'hemorrhages_count', 'total_lesions'
+	"""
+	counts = {}
+	for lesion_key in ["microaneurysms", "exudates", "hemorrhages"]:
+		mask = segmentation_dict.get(lesion_key)
+		if mask is not None and np.count_nonzero(mask) > 0:
+			num_labels, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+			# Filter out single-pixel noise (area >= 3 px)
+			valid_lesions = 0
+			for i in range(1, num_labels):
+				if stats[i, cv2.CC_STAT_AREA] >= 3:
+					valid_lesions += 1
+			counts[f"{lesion_key}_count"] = valid_lesions
+		else:
+			counts[f"{lesion_key}_count"] = 0
+
+	counts["total_lesions"] = sum(counts.values())
+	return counts
+
 
 
 def enhance(

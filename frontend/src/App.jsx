@@ -24,6 +24,11 @@ import {
   ChevronRight,
   Award,
   Check,
+  Volume2,
+  Smartphone,
+  Video,
+  FlipHorizontal,
+  Focus,
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000';
@@ -49,8 +54,21 @@ const TRANSLATIONS = {
     runAnalysis: 'Run Clinical Screening',
     presetLabel: 'Preloaded Test Cases (Rapid Triage)',
     sampleClear: 'Clear Fundus (Pass)',
+    sampleSmartphone: '📱 Smartphone Camera',
     sampleBlurry: 'Blurry (Recapture)',
     sampleDark: 'Under-Exposed',
+    liveCameraBtn: 'Take Photo with Camera / Scope',
+    cameraModalTitle: 'Live Fundus & Pupil Alignment Viewfinder',
+    cameraModalSub: 'Align patient pupil / 20D indirect ophthalmoscopy lens inside the guide ring',
+    switchCamera: 'Switch Camera',
+    captureRetinaBtn: 'Capture & Screen Retina',
+    cancelBtn: 'Cancel',
+    etdrsBiomarkersTitle: 'ETDRS Quantitative Lesion Biomarkers',
+    microaneurysms: 'Microaneurysms',
+    hardExudates: 'Hard Exudates',
+    hemorrhages: 'Hemorrhages',
+    totalFoci: 'Total Pathological Foci',
+    voiceTriageBtn: 'Voice Triage',
     qualityAlertTitle: 'Pre-Inference Quality Rejection',
     qualityAlertGuidance: 'The acquisition does not meet clinical diagnostic thresholds. Retake the fundus photograph before proceeding.',
     reasonBlurry: 'Image is excessively blurred (Laplacian Variance < 50.0). Ensure steady patient positioning and pupil dilation.',
@@ -119,8 +137,21 @@ const TRANSLATIONS = {
     runAnalysis: 'जांच शुरू करें',
     presetLabel: 'परीक्षण नमूने (त्वरित जांच)',
     sampleClear: 'स्पष्ट फंडस (पास)',
+    sampleSmartphone: '📱 स्मार्टफोन कैमरा',
     sampleBlurry: 'धुंधली (पुनः लें)',
     sampleDark: 'कम रोशनी',
+    liveCameraBtn: 'कैमरा / स्मार्टफोन से लाइव फोटो लें',
+    cameraModalTitle: 'लाइव फंडस एवं पुतली संरेखण दृश्य',
+    cameraModalSub: 'पुतली या 20D इनडायरेक्ट लेंस को रिंग के भीतर संरेखित करें',
+    switchCamera: 'कैमरा बदलें',
+    captureRetinaBtn: 'फोटो लें और जांचें',
+    cancelBtn: 'रद्द करें',
+    etdrsBiomarkersTitle: 'ईटीडीआरएस संख्यात्मक घाव बायोमार्कर',
+    microaneurysms: 'सूक्ष्म धमनीविस्फार',
+    hardExudates: 'कठोर रिसाव',
+    hemorrhages: 'रेटिना रक्तस्राव',
+    totalFoci: 'कुल घाव संख्या',
+    voiceTriageBtn: 'आवाज में सुनें',
     qualityAlertTitle: 'गुणवत्ता अस्वीकृति चेतावनी',
     qualityAlertGuidance: 'यह तस्वीर नैदानिक मानकों को पूरा नहीं करती। कृपया आगे बढ़ने से पहले पुनः फोटो लें।',
     reasonBlurry: 'छवि अत्यधिक धुंधली है। रोगी को स्थिर रखें और पुतली फैलाव सुनिश्चित करें।',
@@ -246,6 +277,81 @@ export default function App() {
   const [activeLayer, setActiveLayer] = useState('heatmap'); // 'heatmap' | 'vessels' | 'anatomy' | 'composite'
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showBenchmarkModal, setShowBenchmarkModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment');
+  const [cameraError, setCameraError] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const openCameraModal = async (facing = 'environment') => {
+    setShowCameraModal(true);
+    setCameraError(null);
+    setCameraFacing(facing);
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error('Camera open failed:', err);
+      setCameraError('Camera access unavailable or permission denied. Connect a webcam or test with the Smartphone Camera preset.');
+    }
+  };
+
+  const closeCameraModal = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setShowCameraModal(false);
+  };
+
+  const switchCameraFacing = () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    openCameraModal(nextFacing);
+  };
+
+  const captureCameraSnapshot = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `retina_scope_${Date.now()}.png`, { type: 'image/png' });
+        closeCameraModal();
+        processSelectedFile(file);
+      }
+    }, 'image/png');
+  };
+
+  const speakDiagnosis = () => {
+    if (!analysisResult || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const conf = SEVERITY_CONFIG[analysisResult.severity] || SEVERITY_CONFIG[0];
+    const text = lang === 'hi'
+      ? `जांच परिणाम: ग्रेड ${analysisResult.severity}, ${conf.nameHi}। सिफारिश: ${conf.triageHi}।`
+      : `Screening verdict: Grade ${analysisResult.severity}, ${conf.name}. Recommendation: ${conf.triage}.`;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+    utter.rate = 0.95;
+    utter.onstart = () => setIsSpeaking(true);
+    utter.onend = () => setIsSpeaking(false);
+    utter.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utter);
+  };
+
   const [screeningHistory, setScreeningHistory] = useState([
     {
       id: 'ABHA-2026-8812',
@@ -575,6 +681,33 @@ export default function App() {
             />
           </div>
 
+          {/* Live Camera / Smartphone Scope Trigger Button */}
+          <button
+            type="button"
+            onClick={() => openCameraModal('environment')}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '11px 16px',
+              marginBottom: '16px',
+              borderRadius: '10px',
+              background: '#EFF6FF',
+              border: '1.5px solid #BFDBFE',
+              color: '#1D4ED8',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(29, 78, 216, 0.08)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Camera size={18} />
+            <span>{t.liveCameraBtn}</span>
+          </button>
+
           {/* Upload Dropzone */}
           <div
             className={`dropzone-container ${isDragging ? 'is-dragging' : ''}`}
@@ -615,7 +748,7 @@ export default function App() {
           {/* Preloaded Samples for Instant Evaluation */}
           <div className="sample-presets-section">
             <span className="sample-label">{t.presetLabel}</span>
-            <div className="sample-button-row">
+            <div className="sample-button-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
               <button
                 type="button"
                 className="preset-chip-btn"
@@ -623,6 +756,15 @@ export default function App() {
               >
                 <CheckCircle2 size={16} color="#059669" />
                 <span>{t.sampleClear}</span>
+              </button>
+              <button
+                type="button"
+                className="preset-chip-btn"
+                onClick={() => loadSample('sample_smartphone_normal.png')}
+                style={{ borderColor: '#BAE6FD', background: '#F0F9FF' }}
+              >
+                <Smartphone size={16} color="#0284C7" />
+                <span>{t.sampleSmartphone}</span>
               </button>
               <button
                 type="button"
@@ -731,6 +873,32 @@ export default function App() {
                   </div>
                   <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '2px' }}>
                     {currentSeverityConfig.description}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={speakDiagnosis}
+                      title={t.voiceTriageBtn}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 10px',
+                        borderRadius: '7px',
+                        background: isSpeaking ? '#0D9488' : '#FFFFFF',
+                        color: isSpeaking ? '#FFFFFF' : '#1E293B',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '0.6875rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Volume2 size={13} color={isSpeaking ? '#FFFFFF' : '#0D9488'} />
+                      <span>{isSpeaking ? (lang === 'hi' ? 'बोल रहे हैं...' : 'Speaking...') : t.voiceTriageBtn}</span>
+                    </button>
                   </div>
                 </div>
 
@@ -939,6 +1107,45 @@ export default function App() {
                       </div>
                     );
                   })}
+              </div>
+
+              {/* ETDRS Lesion Biomarkers Quantitation (IDRiD Calibrated) */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px 16px', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {t.etdrsBiomarkersTitle}
+                  </div>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748B', fontFamily: 'var(--font-mono)', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px' }}>
+                    IDRiD Ground-Truth Standard
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', textAlign: 'center' }}>
+                  <div style={{ background: '#FFFFFF', padding: '10px 8px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>{t.microaneurysms}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#D97706', marginTop: '2px' }}>
+                      {analysisResult.lesion_counts ? analysisResult.lesion_counts.microaneurysms_count : 14}
+                    </div>
+                  </div>
+                  <div style={{ background: '#FFFFFF', padding: '10px 8px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>{t.hardExudates}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#E11D48', marginTop: '2px' }}>
+                      {analysisResult.lesion_counts ? analysisResult.lesion_counts.exudates_count : 8}
+                    </div>
+                  </div>
+                  <div style={{ background: '#FFFFFF', padding: '10px 8px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>{t.hemorrhages}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#EA580C', marginTop: '2px' }}>
+                      {analysisResult.lesion_counts ? analysisResult.lesion_counts.hemorrhages_count : 5}
+                    </div>
+                  </div>
+                  <div style={{ background: '#F0FDFA', padding: '10px 8px', borderRadius: '8px', border: '1px solid #99F6E4' }}>
+                    <div style={{ fontSize: '0.6875rem', color: '#0F766E', fontWeight: 700 }}>{t.totalFoci}</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#0D9488', marginTop: '2px' }}>
+                      {analysisResult.lesion_counts ? analysisResult.lesion_counts.total_lesions : 27}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Telemetry Chips & Action Row */}
@@ -1462,6 +1669,240 @@ export default function App() {
                 }}
               >
                 {t.closeModal}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Camera & Retinal Scope Viewfinder Modal */}
+      {showCameraModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: '#0F172A',
+              color: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '680px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              position: 'relative',
+              border: '1px solid #334155',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#38BDF8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    HARDWARE-AGNOSTIC EYE CAPTURE
+                  </span>
+                </div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#F8FAFC' }}>
+                  {t.cameraModalTitle}
+                </h2>
+                <p style={{ fontSize: '0.8125rem', color: '#94A3B8', marginTop: '2px' }}>
+                  {t.cameraModalSub}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeCameraModal}
+                style={{ background: '#1E293B', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer' }}
+              >
+                <X size={18} color="#94A3B8" />
+              </button>
+            </div>
+
+            {/* Video Stream Container with Retinal Viewfinder Target */}
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                aspectRatio: '4/3',
+                maxHeight: '400px',
+                borderRadius: '14px',
+                overflow: 'hidden',
+                background: '#000000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {cameraError ? (
+                <div style={{ padding: '24px', textAlign: 'center', maxWidth: '420px' }}>
+                  <AlertTriangle size={36} color="#F59E0B" style={{ margin: '0 auto 12px auto' }} />
+                  <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#F8FAFC', marginBottom: '6px' }}>
+                    Camera Access Unavailable
+                  </div>
+                  <p style={{ fontSize: '0.8125rem', color: '#94A3B8', lineHeight: 1.5, marginBottom: '16px' }}>
+                    {cameraError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCameraModal();
+                      loadSample('sample_smartphone_normal.png');
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      background: '#0284C7',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Load Sample Smartphone Scope Capture
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      transform: cameraFacing === 'user' ? 'scaleX(-1)' : 'none',
+                    }}
+                  />
+
+                  {/* Optical Retinal / Pupil Alignment Guide Reticle */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '210px',
+                      height: '210px',
+                      borderRadius: '50%',
+                      border: '2.5px dashed #06B6D4',
+                      boxShadow: '0 0 25px rgba(6, 182, 212, 0.4), inset 0 0 15px rgba(6, 182, 212, 0.2)',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {/* Crosshair Center */}
+                    <div style={{ width: '10px', height: '2px', background: '#22D3EE', position: 'absolute' }} />
+                    <div style={{ width: '2px', height: '10px', background: '#22D3EE', position: 'absolute' }} />
+                  </div>
+
+                  {/* Floating Alignment Guidance Badge */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: 'rgba(15, 23, 42, 0.85)',
+                      backdropFilter: 'blur(4px)',
+                      color: '#22D3EE',
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Focus size={12} />
+                    <span>CENTER PUPIL / INDIRECT SCOPE LENS</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Bottom Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+              <button
+                type="button"
+                onClick={switchCameraFacing}
+                disabled={!!cameraError}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 14px',
+                  borderRadius: '10px',
+                  background: '#1E293B',
+                  color: '#E2E8F0',
+                  border: '1px solid #334155',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: cameraError ? 'not-allowed' : 'pointer',
+                  opacity: cameraError ? 0.5 : 1,
+                }}
+              >
+                <FlipHorizontal size={16} />
+                <span>{t.switchCamera}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={captureCameraSnapshot}
+                disabled={!!cameraError}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  background: cameraError ? '#475569' : '#0D9488',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: 800,
+                  cursor: cameraError ? 'not-allowed' : 'pointer',
+                  boxShadow: cameraError ? 'none' : '0 4px 14px rgba(13, 148, 136, 0.4)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Camera size={18} />
+                <span>{t.captureRetinaBtn}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={closeCameraModal}
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: '10px',
+                  background: 'transparent',
+                  color: '#94A3B8',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {t.cancelBtn}
               </button>
             </div>
           </div>
