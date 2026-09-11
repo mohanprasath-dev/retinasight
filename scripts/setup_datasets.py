@@ -38,7 +38,7 @@ DATASET_CONFIG = {
 		"url": "https://drive.grand-challenge.org/",
 		"dir": "datasets/drive",
 		"external_aliases": ["DRIVE", "drive"],
-		"expected_files": ["training", "test", "datasets.zip"],
+		"expected_files": ["datasets", "training", "test", "datasets.zip"],
 		"script": "train_vessel_segmentation.py",
 		"purpose": "Vascular Tree Segmentation Calibration (Dice >= 0.82)",
 	},
