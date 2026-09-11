@@ -344,3 +344,126 @@ def segment(image: Union[str, Path, np.ndarray]) -> Dict[str, np.ndarray]:
 		"exudates": exudates,
 		"hemorrhages": hemorrhages,
 	}
+
+
+def locate_optic_disc_and_fovea(
+	image: Union[str, Path, np.ndarray],
+	mask: Optional[np.ndarray] = None,
+) -> Dict[str, Union[Tuple[int, int], int, float]]:
+	"""Locate the Optic Disc (brightest vascular convergence) and estimate Fovea position.
+
+	Returns:
+		dict with:
+			'optic_disc_center': (x, y)
+			'optic_disc_radius': r
+			'fovea_center': (x, y)
+			'fovea_radius': r
+	"""
+	img = load_image(image)
+	h, w = img.shape[:2]
+	if mask is None:
+		mask, _ = get_retina_mask(img)
+
+	# Optic disc is bright in both green and red channels
+	g = img[:, :, 1].astype(np.float32)
+	r = img[:, :, 2].astype(np.float32)
+	brightness = (g * 0.5 + r * 0.5)
+
+	# Erode mask slightly to avoid perimeter illumination artifacts
+	eroded_mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+	blurred = cv2.GaussianBlur(brightness, (25, 25), 0)
+	blurred_masked = cv2.bitwise_and(blurred, blurred, mask=eroded_mask)
+
+	_, _, _, max_loc = cv2.minMaxLoc(blurred_masked)
+	od_x, od_y = max_loc
+	od_radius = int(min(h, w) * 0.08)
+
+	# Estimate Fovea: temporally offset by ~2.5 optic disc diameters
+	if od_x > w // 2:
+		fovea_x = max(int(od_x - 2.5 * od_radius), int(w * 0.25))
+	else:
+		fovea_x = min(int(od_x + 2.5 * od_radius), int(w * 0.75))
+	fovea_y = int(od_y)
+	fovea_radius = int(od_radius * 0.6)
+
+	return {
+		"optic_disc_center": (od_x, od_y),
+		"optic_disc_radius": od_radius,
+		"fovea_center": (fovea_x, fovea_y),
+		"fovea_radius": fovea_radius,
+	}
+
+
+def render_vessel_overlay(
+	image: Union[str, Path, np.ndarray],
+	vessels_mask: np.ndarray,
+	alpha: float = 0.45,
+) -> np.ndarray:
+	"""Render a clinical vascular angiographic tree overlay in electric cyan."""
+	img = load_image(image)
+	overlay = img.copy()
+
+	# Electric cyan color for blood vessels [B=255, G=220, R=0]
+	cyan = np.array([255, 220, 0], dtype=np.uint8)
+	colored_vessels = np.zeros_like(img)
+	colored_vessels[vessels_mask > 0] = cyan
+
+	# Alpha blend only on vessel pixels
+	vessel_indices = vessels_mask > 0
+	overlay[vessel_indices] = cv2.addWeighted(
+		img[vessel_indices], 1.0 - alpha, colored_vessels[vessel_indices], alpha, 0
+	)
+	return overlay
+
+
+def render_anatomy_overlay(
+	image: Union[str, Path, np.ndarray],
+	anatomy_info: Dict[str, Union[Tuple[int, int], int]],
+) -> np.ndarray:
+	"""Draw surgical markers for Optic Disc (yellow ring) and Fovea (cyan target)."""
+	img = load_image(image).copy()
+	od_c = anatomy_info["optic_disc_center"]
+	od_r = anatomy_info["optic_disc_radius"]
+	fovea_c = anatomy_info["fovea_center"]
+	fovea_r = anatomy_info["fovea_radius"]
+
+	# Draw Optic Disc target ring (amber/yellow)
+	cv2.circle(img, od_c, od_r, (0, 215, 255), 2, cv2.LINE_AA)
+	cv2.circle(img, od_c, 3, (0, 215, 255), -1, cv2.LINE_AA)
+	cv2.putText(
+		img, "OPTIC DISC", (od_c[0] - 40, od_c[1] - od_r - 8),
+		cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 215, 255), 1, cv2.LINE_AA
+	)
+
+	# Draw Fovea/Macula target reticle (cyan)
+	cv2.circle(img, fovea_c, fovea_r, (255, 220, 0), 2, cv2.LINE_AA)
+	cv2.drawMarker(img, fovea_c, (255, 220, 0), cv2.MARKER_CROSS, 14, 1, cv2.LINE_AA)
+	cv2.putText(
+		img, "FOVEA / MACULA", (fovea_c[0] - 50, fovea_c[1] + fovea_r + 16),
+		cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 220, 0), 1, cv2.LINE_AA
+	)
+
+	return img
+
+
+def render_composite_overlay(
+	image: Union[str, Path, np.ndarray],
+	heatmap_overlay: np.ndarray,
+	vessels_mask: np.ndarray,
+	anatomy_info: Dict[str, Union[Tuple[int, int], int]],
+) -> np.ndarray:
+	"""Merge Grad-CAM lesions, vascular tree, and anatomical landmarks into one multi-structure view."""
+	# Start from heatmap overlay
+	composite = heatmap_overlay.copy()
+
+	# Blend vessels in electric cyan
+	cyan = np.array([255, 220, 0], dtype=np.uint8)
+	vessel_indices = vessels_mask > 0
+	composite[vessel_indices] = cv2.addWeighted(
+		composite[vessel_indices], 0.65, np.tile(cyan, (np.count_nonzero(vessel_indices), 1)), 0.35, 0
+	)
+
+	# Overlay anatomical targets
+	composite = render_anatomy_overlay(composite, anatomy_info)
+	return composite
+

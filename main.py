@@ -35,7 +35,12 @@ import train_dr_classifier
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 HEATMAPS_DIR = OUTPUTS_DIR / "heatmaps"
-HEATMAPS_DIR.mkdir(parents=True, exist_ok=True)
+VESSELS_DIR = OUTPUTS_DIR / "vessels"
+ANATOMY_DIR = OUTPUTS_DIR / "anatomy"
+COMPOSITE_DIR = OUTPUTS_DIR / "composite"
+
+for d in [HEATMAPS_DIR, VESSELS_DIR, ANATOMY_DIR, COMPOSITE_DIR]:
+	d.mkdir(parents=True, exist_ok=True)
 
 MODEL_ONNX_PATH = BASE_DIR / "retinasight_resnet50.onnx"
 MODEL_PTH_PATH = BASE_DIR / "retinasight_resnet50.pth"
@@ -219,13 +224,33 @@ async def predict_retinopathy(file: UploadFile = File(...)):
 		device=device,
 	)
 
-	# Save heatmap overlay to static outputs directory
+	# Stage 3: Retinal Structure Segmentation & Anatomical Localization
+	mask, _ = preprocessing.get_retina_mask(enhanced_bgr)
+	vessels_mask = preprocessing.segment_vessels(enhanced_bgr)
+	vessels_overlay = preprocessing.render_vessel_overlay(enhanced_bgr, vessels_mask)
+	anatomy_info = preprocessing.locate_optic_disc_and_fovea(enhanced_bgr, mask)
+	anatomy_overlay = preprocessing.render_anatomy_overlay(enhanced_bgr, anatomy_info)
+	composite_overlay = preprocessing.render_composite_overlay(enhanced_bgr, overlay, vessels_mask, anatomy_info)
+
+	retina_pixel_count = max(float(np.count_nonzero(mask)), 1.0)
+	vessel_density = round(float(np.count_nonzero(vessels_mask)) / retina_pixel_count, 4)
+
+	# Save multi-layer overlays to static outputs directory
 	file_id = f"{uuid.uuid4().hex[:12]}_{int(time.time())}"
 	heatmap_filename = f"heatmap_{file_id}.png"
-	heatmap_save_path = HEATMAPS_DIR / heatmap_filename
-	cv2.imwrite(str(heatmap_save_path), overlay)
+	vessels_filename = f"vessels_{file_id}.png"
+	anatomy_filename = f"anatomy_{file_id}.png"
+	composite_filename = f"composite_{file_id}.png"
+
+	cv2.imwrite(str(HEATMAPS_DIR / heatmap_filename), overlay)
+	cv2.imwrite(str(VESSELS_DIR / vessels_filename), vessels_overlay)
+	cv2.imwrite(str(ANATOMY_DIR / anatomy_filename), anatomy_overlay)
+	cv2.imwrite(str(COMPOSITE_DIR / composite_filename), composite_overlay)
 
 	grad_cam_url = f"/outputs/heatmaps/{heatmap_filename}"
+	vessels_url = f"/outputs/vessels/{vessels_filename}"
+	anatomy_url = f"/outputs/anatomy/{anatomy_filename}"
+	composite_url = f"/outputs/composite/{composite_filename}"
 	total_time = round(time.time() - t_start, 3)
 
 	return {
@@ -235,6 +260,15 @@ async def predict_retinopathy(file: UploadFile = File(...)):
 		"severity_label": severity_label,
 		"confidence": round(confidence, 4),
 		"grad_cam_url": grad_cam_url,
+		"vessels_url": vessels_url,
+		"anatomy_url": anatomy_url,
+		"composite_url": composite_url,
+		"vessel_density": vessel_density,
+		"anatomy": {
+			"optic_disc": anatomy_info["optic_disc_center"],
+			"fovea": anatomy_info["fovea_center"],
+			"optic_disc_radius": anatomy_info["optic_disc_radius"],
+		},
 		"class_probabilities": {
 			ICDR_CLASSES[i]: round(float(probs[i]), 4) for i in range(len(ICDR_CLASSES))
 		},
