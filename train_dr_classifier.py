@@ -49,8 +49,22 @@ ICDR_CLASSES = {
 NUM_CLASSES = 5
 IMAGE_SIZE = (256, 256)
 
-# Default Kaggle dataset directories
-KAGGLE_DATASET_DIR = Path("/kaggle/input/aptos2019-blindness-detection")
+def resolve_aptos_dir() -> Path:
+	candidates = [
+		Path("D:/SIH2026/Datasets/aptos2019"),
+		Path("D:/SIH2026/Datasets/APTOS"),
+		Path("D:/SIH2026/Datasets/aptos"),
+		Path("../Datasets/aptos2019"),
+		Path("datasets/aptos2019"),
+		Path("/kaggle/input/aptos2019-blindness-detection"),
+	]
+	for c in candidates:
+		if c.exists():
+			return c
+	return Path("datasets/aptos2019")
+
+DEFAULT_APTOS_DIR = resolve_aptos_dir()
+KAGGLE_DATASET_DIR = DEFAULT_APTOS_DIR
 KAGGLE_TRAIN_CSV = KAGGLE_DATASET_DIR / "train.csv"
 KAGGLE_TRAIN_IMAGES = KAGGLE_DATASET_DIR / "train_images"
 

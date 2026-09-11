@@ -47,7 +47,19 @@ LESION_CLASSES = {
 NUM_LESION_CLASSES = 5
 IMAGE_SIZE = (512, 512)
 
-DEFAULT_IDRID_DIR = Path("datasets/idrid")
+def resolve_idrid_dir() -> Path:
+	candidates = [
+		Path("D:/SIH2026/Datasets/IDRiD"),
+		Path("D:/SIH2026/Datasets/idrid"),
+		Path("../Datasets/IDRiD"),
+		Path("datasets/idrid"),
+	]
+	for c in candidates:
+		if c.exists():
+			return c
+	return Path("datasets/idrid")
+
+DEFAULT_IDRID_DIR = resolve_idrid_dir()
 
 
 # ------------------------------------------------------------------------------

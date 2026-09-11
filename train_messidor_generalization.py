@@ -35,7 +35,19 @@ import torchvision.transforms as transforms
 import train_dr_classifier
 
 
-DEFAULT_MESSIDOR_DIR = Path("datasets/messidor2")
+def resolve_messidor_dir() -> Path:
+	candidates = [
+		Path("D:/SIH2026/Datasets/Messidor-2"),
+		Path("D:/SIH2026/Datasets/messidor2"),
+		Path("../Datasets/Messidor-2"),
+		Path("datasets/messidor2"),
+	]
+	for c in candidates:
+		if c.exists():
+			return c
+	return Path("datasets/messidor2")
+
+DEFAULT_MESSIDOR_DIR = resolve_messidor_dir()
 IMAGE_SIZE = (256, 256)
 
 
@@ -57,13 +69,24 @@ class Messidor2Dataset(Dataset):
 		self.synthetic_fallback = synthetic_fallback
 
 		images_dir = self.data_dir / "images"
+		if not images_dir.exists():
+			images_dir = self.data_dir
+
 		if csv_path is None:
-			csv_path = self.data_dir / "messidor_data.csv"
+			for cand in [self.data_dir / "messidor-2.csv", self.data_dir / "messidor_data.csv", self.data_dir / "messidor2.csv"]:
+				if cand.exists():
+					csv_path = cand
+					break
+			if csv_path is None:
+				csv_path = self.data_dir / "messidor-2.csv"
 		else:
 			csv_path = Path(csv_path)
 
-		if csv_path.exists() and images_dir.exists():
-			self.df = pd.read_csv(csv_path)
+		if csv_path.exists():
+			try:
+				self.df = pd.read_csv(csv_path, sep=None, engine="python")
+			except Exception:
+				self.df = pd.read_csv(csv_path)
 			self.images_dir = images_dir
 			self.is_synthetic = False
 			self.num_samples = len(self.df)

@@ -32,7 +32,19 @@ import torchvision.transforms as transforms
 import preprocessing
 
 
-DEFAULT_DRIVE_DIR = Path("datasets/drive")
+def resolve_drive_dir() -> Path:
+	candidates = [
+		Path("D:/SIH2026/Datasets/DRIVE"),
+		Path("D:/SIH2026/Datasets/drive"),
+		Path("../Datasets/DRIVE"),
+		Path("datasets/drive"),
+	]
+	for c in candidates:
+		if c.exists():
+			return c
+	return Path("datasets/drive")
+
+DEFAULT_DRIVE_DIR = resolve_drive_dir()
 IMAGE_SIZE = (512, 512)
 
 
