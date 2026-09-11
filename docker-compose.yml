@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  retinasight:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: retinasight:sih2026
+    container_name: retinasight_screening_node
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ./outputs:/app/outputs
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info

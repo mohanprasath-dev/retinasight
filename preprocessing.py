@@ -142,6 +142,25 @@ def quality_check(
 			f"Retina is off-center (Offset ratio: {offset_ratio:.2f} > tolerance {centering_tolerance:.2f}). Re-align target pupil."
 		)
 
+	# 4. Anatomical & Chromatic Spectrum Authenticity Gate
+	# Real human fundus images are dominated by hemoglobin/melanin optical absorption (red-orange spectrum)
+	if len(img.shape) == 3:
+		retina_pixels_bgr = img[mask > 0] if np.count_nonzero(mask) > 0 else img.reshape(-1, 3)
+		b_mean = float(np.mean(retina_pixels_bgr[:, 0]))
+		g_mean = float(np.mean(retina_pixels_bgr[:, 1]))
+		r_mean = float(np.mean(retina_pixels_bgr[:, 2]))
+		red_to_blue_ratio = r_mean / max(b_mean, 1.0)
+
+		if red_to_blue_ratio < 1.25 or r_mean < (g_mean * 0.80):
+			reasons.append(
+				f"Non-retinal image detected: Chromatic signature (R/B ratio: {red_to_blue_ratio:.2f} < 1.25) does not match human fundus optics. Please upload an authentic retinal capture."
+			)
+	else:
+		red_to_blue_ratio = 1.0
+		reasons.append(
+			"Single-channel grayscale input: Retinal screening requires 3-channel RGB fundus imaging for hemoglobin absorption assessment."
+		)
+
 	passed = len(reasons) == 0
 
 	return {
@@ -153,6 +172,7 @@ def quality_check(
 			"mean_brightness": round(mean_brightness, 2),
 			"centering_offset_ratio": round(offset_ratio, 3),
 			"fov_coverage": round(fov_coverage, 3),
+			"red_to_blue_ratio": round(red_to_blue_ratio, 2),
 		},
 	}
 

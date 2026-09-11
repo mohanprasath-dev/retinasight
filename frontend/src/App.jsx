@@ -89,6 +89,15 @@ const TRANSLATIONS = {
     referralDetails: 'Clinical Referral Details',
     doctorSignature: 'Examining Medical Officer / CHW Signature',
     dateLabel: 'Date & Time',
+    campQueueTitle: "Today's PHC Screening Camp Queue",
+    campQueueSubtitle: 'Cumulative screening roster for visiting tele-ophthalmology specialist van',
+    exportCsv: 'Export Camp Log (CSV)',
+    colPatientId: 'Patient / ABHA ID',
+    colTime: 'Time',
+    colStatus: 'Quality Gate',
+    colDiagnosis: 'Diagnosis',
+    colConfidence: 'Confidence',
+    colTriage: 'Triage Recommendation',
   },
   hi: {
     appTitle: 'रेटिनासाइट',
@@ -150,6 +159,15 @@ const TRANSLATIONS = {
     referralDetails: 'नैदानिक रेफरल विवरण',
     doctorSignature: 'परीक्षक चिकित्सा अधिकारी के हस्ताक्षर',
     dateLabel: 'दिनांक एवं समय',
+    campQueueTitle: 'आज का प्राथमिक स्वास्थ्य केंद्र स्क्रीनिंग लॉग',
+    campQueueSubtitle: 'विशेषज्ञ समीक्षा एवं रेफरल हेतु दैनिक लॉग',
+    exportCsv: 'दैनिक लॉग डाउनलोड करें (CSV)',
+    colPatientId: 'रोगी / आभा आईडी',
+    colTime: 'समय',
+    colStatus: 'गुणवत्ता स्थिति',
+    colDiagnosis: 'निदान',
+    colConfidence: 'विश्वास स्तर',
+    colTriage: 'सिफारिश',
   }
 };
 
@@ -228,8 +246,49 @@ export default function App() {
   const [activeLayer, setActiveLayer] = useState('heatmap'); // 'heatmap' | 'vessels' | 'anatomy' | 'composite'
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showBenchmarkModal, setShowBenchmarkModal] = useState(false);
+  const [screeningHistory, setScreeningHistory] = useState([
+    {
+      id: 'ABHA-2026-8812',
+      time: '09:42 AM',
+      status: 'Passed',
+      diagnosis: 'Grade 0 (No DR)',
+      confidence: '96.2%',
+      triage: 'Routine Annual Follow-up (12 Months)',
+      passed: true,
+    },
+    {
+      id: 'ABHA-2026-8815',
+      time: '10:15 AM',
+      status: 'Passed',
+      diagnosis: 'Grade 1 (Mild)',
+      confidence: '91.8%',
+      triage: 'Semi-Annual Surveillance (6 Months)',
+      passed: true,
+    },
+  ]);
 
   const fileInputRef = useRef(null);
+
+  const exportCampCsv = () => {
+    if (screeningHistory.length === 0) return;
+    const headers = ['Patient ID / ABHA', 'Screening Time', 'Quality Status', 'Diagnosis', 'Confidence', 'Triage Recommendation'];
+    const rows = screeningHistory.map((r) => [
+      `"${r.id}"`,
+      `"${r.time}"`,
+      `"${r.status}"`,
+      `"${r.diagnosis}"`,
+      `"${r.confidence}"`,
+      `"${r.triage}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `retinasight_camp_triage_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const getActiveOverlayUrl = () => {
     if (!analysisResult) return null;
@@ -333,6 +392,20 @@ export default function App() {
           mean_illumination: qm.mean_brightness ?? data.mean_illumination,
           fov_ratio: qm.fov_coverage ?? data.fov_ratio,
         });
+
+        // Log to camp roster as quality rejection
+        setScreeningHistory((prev) => [
+          {
+            id: patientId || `ABHA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Recapture Required',
+            diagnosis: 'Ungradeable Capture',
+            confidence: 'N/A',
+            triage: 'Retake Photograph Immediately',
+            passed: false,
+          },
+          ...prev,
+        ]);
       } else {
         // Diagnostic success: normalize probabilities & metrics
         const probs = data.probabilities || (data.class_probabilities ? [
@@ -353,6 +426,20 @@ export default function App() {
         };
 
         setAnalysisResult(normalized);
+
+        // Log to camp roster as diagnostic success
+        setScreeningHistory((prev) => [
+          {
+            id: patientId || `ABHA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'Passed',
+            diagnosis: `Grade ${data.severity} (${data.severity_label})`,
+            confidence: `${(data.confidence * 100).toFixed(1)}%`,
+            triage: SEVERITY_CONFIG[data.severity]?.triage || 'Specialist Referral',
+            passed: true,
+          },
+          ...prev,
+        ]);
       }
     } catch (err) {
       console.error('Inference error', err);
@@ -949,6 +1036,98 @@ export default function App() {
           )}
         </section>
       </main>
+
+      {/* Today's PHC Camp Screening Queue & Batch Export */}
+      <section className="clinical-card" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock size={18} color="#0D9488" />
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                {t.campQueueTitle}
+              </h2>
+              <span style={{ background: '#F1F5F9', color: '#475569', fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>
+                {screeningHistory.length} Screenings Today
+              </span>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '2px' }}>
+              {t.campQueueSubtitle}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={exportCampCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              background: '#0F172A',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            }}
+          >
+            <Download size={14} />
+            <span>{t.exportCsv}</span>
+          </button>
+        </div>
+
+        <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569' }}>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colPatientId}</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colTime}</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colStatus}</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colDiagnosis}</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colConfidence}</th>
+                <th style={{ padding: '10px 14px', fontWeight: 700 }}>{t.colTriage}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {screeningHistory.map((item, index) => (
+                <tr key={index} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#0F172A' }}>
+                    {item.id}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: '#64748B' }}>{item.time}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      background: item.passed ? '#ECFDF5' : '#FFFBEB',
+                      color: item.passed ? '#059669' : '#D97706',
+                    }}>
+                      {item.passed ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                      {item.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 14px', fontWeight: 700, color: '#1E293B' }}>
+                    {item.diagnosis}
+                  </td>
+                  <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', color: '#475569' }}>
+                    {item.confidence}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: '#334155' }}>
+                    {item.triage}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Referral Slip Modal (Clinical Print Document) */}
       {showReferralModal && analysisResult && currentSeverityConfig && (
