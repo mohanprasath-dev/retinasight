@@ -279,12 +279,36 @@ export default function App() {
 
       const data = await response.json();
 
-      if (response.status === 422 || !data.passed) {
+      const qm = data.quality_metrics || {};
+
+      if (response.status === 422 || data.status === 'reject' || data.passed === false) {
         // Preprocessing quality rejection
-        setRejectionData(data);
+        setRejectionData({
+          ...data,
+          blur_variance: qm.blur_variance ?? data.blur_variance,
+          mean_illumination: qm.mean_brightness ?? data.mean_illumination,
+          fov_ratio: qm.fov_coverage ?? data.fov_ratio,
+        });
       } else {
-        // Success
-        setAnalysisResult(data);
+        // Diagnostic success: normalize probabilities & metrics
+        const probs = data.probabilities || (data.class_probabilities ? [
+          data.class_probabilities['No DR'] ?? 0,
+          data.class_probabilities['Mild'] ?? 0,
+          data.class_probabilities['Moderate'] ?? 0,
+          data.class_probabilities['Severe'] ?? 0,
+          data.class_probabilities['Proliferative DR'] ?? 0,
+        ] : [0, 0, 0, 0, 0]);
+
+        const normalized = {
+          ...data,
+          probabilities: probs,
+          blur_variance: qm.blur_variance ?? data.blur_variance,
+          mean_illumination: qm.mean_brightness ?? data.mean_illumination,
+          fov_ratio: qm.fov_coverage ?? data.fov_ratio,
+          latency_ms: data.processing_time_seconds ? data.processing_time_seconds * 1000 : (data.latency_ms ?? 24),
+        };
+
+        setAnalysisResult(normalized);
       }
     } catch (err) {
       console.error('Inference error', err);
