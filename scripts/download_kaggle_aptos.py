@@ -21,12 +21,12 @@ APTOS_RESIZED_DATASET = "benjaminwarner/aptos2019-blindness-detection-256x256"
 
 
 def check_kaggle_auth() -> bool:
-	"""Check if Kaggle API is authenticated via ~/.kaggle/kaggle.json or environment."""
-	kaggle_json = Path.home() / ".kaggle" / "kaggle.json"
-	has_json = kaggle_json.exists()
+	"""Check if Kaggle API is authenticated via ~/.kaggle/kaggle.json, access_token, or environment."""
+	kaggle_dir = Path.home() / ".kaggle"
+	has_creds = (kaggle_dir / "kaggle.json").exists() or (kaggle_dir / "access_token").exists()
 	has_env = bool(os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"))
 
-	if has_json or has_env:
+	if has_creds or has_env:
 		return True
 
 	# Try running kaggle config view

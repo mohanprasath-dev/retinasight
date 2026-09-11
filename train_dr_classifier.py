@@ -127,6 +127,13 @@ class AptosDataset(Dataset):
 		self.transform = transform
 		self.is_training = is_training
 
+		# Build fast O(1) filename lookup table (supports flat and nested class directories)
+		self.id_to_path = {}
+		if self.image_dir.exists():
+			for ext in ("*.png", "*.jpg", "*.jpeg", "*.tif"):
+				for p in self.image_dir.rglob(ext):
+					self.id_to_path[p.stem] = p
+
 	def __len__(self) -> int:
 		return len(self.df)
 
@@ -135,17 +142,18 @@ class AptosDataset(Dataset):
 		id_code = str(row.get("id_code", row.get("Image name", row.get("id", ""))))
 		label = int(row.get("diagnosis", row.get("Retinopathy grade", 0)))
 
-		# Find image file (handle .png, .jpg, or .tif)
-		img_path = None
-		for ext in [".png", ".jpg", ".tif", ".jpeg"]:
-			cand = self.image_dir / f"{id_code}{ext}"
-			if cand.exists():
-				img_path = cand
-				break
+		# Fast O(1) dictionary lookup
+		img_path = self.id_to_path.get(id_code)
+		if img_path is None:
+			for ext in [".png", ".jpg", ".tif", ".jpeg"]:
+				cand = self.image_dir / f"{id_code}{ext}"
+				if cand.exists():
+					img_path = cand
+					break
 		if img_path is None:
 			img_path = self.image_dir / id_code
 
-		if img_path.exists():
+		if img_path and img_path.exists():
 			img_bgr = cv2.imread(str(img_path))
 		else:
 			# Fallback for synthetic/missing images
@@ -443,6 +451,7 @@ def main():
 	parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
 	parser.add_argument("--out-onnx", type=str, default="retinasight_resnet50.onnx", help="Path to export final ONNX model")
 	parser.add_argument("--out-pth", type=str, default="retinasight_resnet50.pth", help="Path to save best PyTorch checkpoint")
+	parser.add_argument("--max-samples", type=int, default=None, help="Limit dataset to N samples for rapid calibration")
 	parser.add_argument("--smoke-test", action="store_true", help="Run 2-epoch dry run smoke test with synthetic/local samples")
 	args = parser.parse_args()
 
@@ -469,6 +478,10 @@ def main():
 	elif use_aptos:
 		print(f"\n[Dataset] Loading APTOS dataset from: {data_dir}")
 		df = pd.read_csv(train_csv_path)
+		if (data_dir / "colored_images").exists():
+			train_images_dir = data_dir / "colored_images"
+		elif not train_images_dir.exists():
+			train_images_dir = data_dir
 		epochs = args.epochs
 		batch_size = args.batch_size
 	elif use_idrid:
@@ -484,6 +497,12 @@ def main():
 		df, train_images_dir = generate_synthetic_dataset(num_samples=25)
 		epochs = min(args.epochs, 2)
 		batch_size = 4
+
+	if args.max_samples and len(df) > args.max_samples:
+		df = df.groupby("diagnosis", group_keys=False).apply(
+			lambda x: x.sample(max(1, int(round(args.max_samples * len(x) / len(df)))), random_state=42)
+		).reset_index(drop=True)
+		print(f"[Dataset] Stratified downsampling applied: {len(df)} samples (--max-samples {args.max_samples})")
 
 	print(f"[Dataset] Total samples: {len(df)}")
 	print(f"[Dataset] Class distribution:\n{df['diagnosis'].value_counts().sort_index()}")
