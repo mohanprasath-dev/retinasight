@@ -24,10 +24,6 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
-if sys.platform == "win32" and hasattr(sys.stdout, "buffer"):
-	sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-	sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-
 import cv2
 import numpy as np
 import pandas as pd
