@@ -1,0 +1,58 @@
+[
+  {
+    "id": "RS-00",
+    "title": "Repo initialization",
+    "instruction": "Init git repo named `retinasight`. Add MIT LICENSE file (standard MIT text, copyright Mohan Prasath 2026). Create README.md with: project name, one-line description ('Explainable AI pipeline for Diabetic Retinopathy screening in rural India — CNN severity grading (ICDR 0-4) with Grad-CAM lesion explainability, built for SIH 2026, PS 26038, Team OnFocus'), tech stack list, folder structure (per AGENT.md), setup instructions placeholder, and a note on the MATLAB->PyTorch/OpenCV substitution. Add standard Python .gitignore (venv, __pycache__, .env, node_modules for frontend/).",
+    "acceptance": "Repo has LICENSE, README.md, .gitignore committed as first commit.",
+    "note": "Do this before RS-01. License = MIT, decided by Mohan. Repo name = retinasight, fixed."
+  },
+  {
+    "id": "RS-01",
+    "title": "Image preprocessing pipeline (Stage 1-3)",
+    "instruction": "Build a Python module `preprocessing.py` for retinal fundus images. Implement: (1) quality_check(image) -> returns pass/fail + reason (blur via Laplacian variance threshold, brightness via mean intensity range, centering via retina circle detection with Hough/contour); (2) enhance(image) -> apply CLAHE on green channel + bilateral denoise for images flagged low-quality but recoverable; (3) segment(image) -> use a pretrained/simple U-Net or classical CV (adaptive threshold + morphological ops) to output binary masks for vessels, and stub functions for microaneurysm/exudate/hemorrhage detection (classical blob detection acceptable for MVP, note as placeholder for CNN-based approach). Use OpenCV + numpy. No MATLAB dependencies. Reference skill: systematic-debugging if segmentation output looks wrong.",
+    "acceptance": "Given a sample fundus image (any public sample, not full dataset), quality_check returns correct pass/fail on a deliberately blurry vs. clear test pair. enhance() visibly improves a dark test image (screenshot-verify histogram spread). segment() produces a non-empty vessel mask on a clear image.",
+    "note": "Do NOT wait for full APTOS dataset. Test with 2-3 sample images pulled from a public source or Mohan-provided sample. Screenshot-verify each function's output, don't trust self-report."
+  },
+  {
+    "id": "RS-02",
+    "title": "CNN training script for Kaggle notebook (Stage 4)",
+    "instruction": "Write a self-contained Kaggle-notebook-ready Python script `train_dr_classifier.py` that: loads APTOS 2019 dataset directly via Kaggle's built-in dataset path (/kaggle/input/aptos2019-blindness-detection), builds a ResNet50 (ImageNet pretrained, torchvision) fine-tuned for 5-class ICDR severity (0-4), uses standard train/val split (80/20 stratified), applies the preprocessing from RS-01 as a transform step, trains with cross-entropy loss + class weighting (APTOS is imbalanced), logs sensitivity/specificity per class, and exports the best checkpoint to ONNX at the end. Use PyTorch, not MATLAB Deep Learning Toolbox — note this substitution explicitly in a code comment for the pitch doc.",
+    "acceptance": "Script runs top-to-bottom on Kaggle GPU notebook without errors on a 2-epoch smoke test. Final ONNX file exports successfully and loads back with onnxruntime for a test inference.",
+    "note": "This runs on Kaggle, not locally — Mohan will paste/run this in a Kaggle notebook. Antigravity should NOT attempt to execute training itself. Model escalation: Gemini Flash for boilerplate, escalate to Claude Sonnet if training loop or class-imbalance logic fails twice."
+  },
+  {
+    "id": "RS-03",
+    "title": "Grad-CAM explainability module (Stage 5)",
+    "instruction": "Build `gradcam.py` using pytorch-grad-cam or a manual Grad-CAM implementation against the ResNet50 model from RS-02. Function generate_heatmap(image, model, target_layer='layer4') returns an overlay image (heatmap blended on original at 0.5 alpha) and a raw CAM array. Include a CLI entrypoint: `python gradcam.py --image path.jpg --model model.onnx --out heatmap.png`.",
+    "acceptance": "CLI runs on one sample image + the trained model and produces a visually sensible heatmap.png (screenshot-verify heat concentrates on retina, not black background/edges).",
+    "note": "Depends on RS-02 model checkpoint existing. If model isn't trained yet, stub with a dummy small CNN for pipeline testing, swap in real model later."
+  },
+  {
+    "id": "RS-04",
+    "title": "FastAPI wrapper (/predict endpoint)",
+    "instruction": "Build `main.py` FastAPI app with POST /predict accepting multipart image upload. Pipeline: run preprocessing.quality_check -> if fail, return {status:'reject', reason}; else preprocessing.enhance -> model inference (ONNX runtime) -> gradcam.generate_heatmap -> return JSON {severity: int, confidence: float, grad_cam_url: str}. Save heatmap to a static /outputs folder, serve via FastAPI StaticFiles. Include CORS middleware for React frontend.",
+    "acceptance": "curl -X POST with a sample image returns valid JSON with all fields populated; grad_cam_url resolves to a viewable PNG.",
+    "note": "Skill: gstack-qa for endpoint testing before wiring frontend."
+  },
+  {
+    "id": "RS-05",
+    "title": "React UI — upload + prediction display",
+    "instruction": "Build a single-page React app (Vite) with: file upload input, 'Analyze' button calling POST /predict, display severity level (0-4 with plain-language ICDR label), confidence %, and the Grad-CAM heatmap image side-by-side with the original upload. Basic clean styling, no auth needed. Reference skill: frontend-design for layout quality.",
+    "acceptance": "Screenshot-verify: upload image -> click Analyze -> both images + severity label render correctly without console errors.",
+    "note": "Depends on RS-04 API being live at localhost. Use webapp-testing skill (Playwright) to verify end-to-end before calling done."
+  },
+  {
+    "id": "RS-06",
+    "title": "Flutter camera capture stub (PHC app)",
+    "instruction": "Build a minimal Flutter app: single screen with camera capture button, preview captured image, 'Submit' button that calls the /predict API (mock the offline queue — just log 'queued for sync' to console, no real IndexedDB/sync logic needed for MVP demo).",
+    "acceptance": "App builds and runs on emulator; capturing an image and hitting Submit shows a mock success message.",
+    "note": "Lowest priority — only build if time remains after RS-01 through RS-05 are solid. Full offline sync explicitly out of scope for MVP per original spec."
+  },
+  {
+    "id": "RS-07",
+    "title": "Simulink deployment mockup (documentation only)",
+    "instruction": "No code — create a diagram (use figma-generate-diagram skill or a simple draw.io/markdown flowchart) showing: input (screenings/day) -> staffing calculation -> throughput -> referral logistics output, with placeholder formulas (e.g. throughput = num_PHC_staff * screenings_per_staff_per_day). Export as PNG for the pitch deck.",
+    "acceptance": "Diagram is clear enough to explain district-scale rollout math to a judge in under 1 minute.",
+    "note": "This is a documentation deliverable, not executable Simulink — be upfront about this substitution in the demo if asked."
+  }
+]
