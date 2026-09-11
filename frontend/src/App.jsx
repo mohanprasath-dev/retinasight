@@ -43,7 +43,7 @@ const TRANSLATIONS = {
     analyzing: 'Analyzing Retina with XAI...',
     runAnalysis: 'Run Clinical Screening',
     presetLabel: 'Preloaded Test Cases (Rapid Triage)',
-    sampleClear: 'Clear (Grade 2)',
+    sampleClear: 'Clear Fundus (Pass)',
     sampleBlurry: 'Blurry (Recapture)',
     sampleDark: 'Under-Exposed',
     qualityAlertTitle: 'Pre-Inference Quality Rejection',
@@ -95,7 +95,7 @@ const TRANSLATIONS = {
     analyzing: 'एआई द्वारा रेटिना का विश्लेषण जारी...',
     runAnalysis: 'जांच शुरू करें',
     presetLabel: 'परीक्षण नमूने (त्वरित जांच)',
-    sampleClear: 'स्पष्ट (ग्रेड 2)',
+    sampleClear: 'स्पष्ट फंडस (पास)',
     sampleBlurry: 'धुंधली (पुनः लें)',
     sampleDark: 'कम रोशनी',
     qualityAlertTitle: 'गुणवत्ता अस्वीकृति चेतावनी',
@@ -254,7 +254,8 @@ export default function App() {
     try {
       const response = await fetch(`/samples/${sampleName}`);
       const blob = await response.blob();
-      const file = new File([blob], sampleName, { type: blob.type || 'image/jpeg' });
+      const mime = sampleName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const file = new File([blob], sampleName, { type: mime });
       processSelectedFile(file);
     } catch (err) {
       console.error('Failed to load sample', err);

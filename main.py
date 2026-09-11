@@ -166,13 +166,18 @@ async def predict_retinopathy(file: UploadFile = File(...)):
 
 	# 2. Stage 1: Quality Check Gate
 	qc_result = preprocessing.quality_check(image_bgr)
+	metrics = qc_result.get("metrics", {})
 	if not qc_result["passed"]:
 		primary_reason = qc_result["reasons"][0] if qc_result["reasons"] else "Image quality below diagnostic threshold."
 		return {
 			"status": "reject",
+			"passed": False,
 			"reason": primary_reason,
 			"reasons": qc_result["reasons"],
-			"quality_metrics": qc_result["metrics"],
+			"blur_variance": round(float(metrics.get("blur_variance", 0.0)), 2),
+			"mean_illumination": round(float(metrics.get("mean_brightness", 0.0)), 2),
+			"fov_ratio": round(float(metrics.get("fov_coverage", 0.0)), 3),
+			"quality_metrics": metrics,
 			"processing_time_seconds": round(time.time() - t_start, 3),
 		}
 
@@ -225,6 +230,7 @@ async def predict_retinopathy(file: UploadFile = File(...)):
 
 	return {
 		"status": "accept",
+		"passed": True,
 		"severity": severity,
 		"severity_label": severity_label,
 		"confidence": round(confidence, 4),
@@ -232,7 +238,10 @@ async def predict_retinopathy(file: UploadFile = File(...)):
 		"class_probabilities": {
 			ICDR_CLASSES[i]: round(float(probs[i]), 4) for i in range(len(ICDR_CLASSES))
 		},
-		"quality_metrics": qc_result["metrics"],
+		"blur_variance": round(float(metrics.get("blur_variance", 0.0)), 2),
+		"mean_illumination": round(float(metrics.get("mean_brightness", 0.0)), 2),
+		"fov_ratio": round(float(metrics.get("fov_coverage", 0.0)), 3),
+		"quality_metrics": metrics,
 		"processing_time_seconds": total_time,
 	}
 
