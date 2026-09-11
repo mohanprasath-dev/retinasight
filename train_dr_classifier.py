@@ -132,13 +132,18 @@ class AptosDataset(Dataset):
 
 	def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
 		row = self.df.iloc[idx]
-		id_code = str(row["id_code"])
-		label = int(row["diagnosis"])
+		id_code = str(row.get("id_code", row.get("Image name", row.get("id", ""))))
+		label = int(row.get("diagnosis", row.get("Retinopathy grade", 0)))
 
-		# Find image file (handle .png or .jpg)
-		img_path = self.image_dir / f"{id_code}.png"
-		if not img_path.exists():
-			img_path = self.image_dir / f"{id_code}.jpg"
+		# Find image file (handle .png, .jpg, or .tif)
+		img_path = None
+		for ext in [".png", ".jpg", ".tif", ".jpeg"]:
+			cand = self.image_dir / f"{id_code}{ext}"
+			if cand.exists():
+				img_path = cand
+				break
+		if img_path is None:
+			img_path = self.image_dir / id_code
 
 		if img_path.exists():
 			img_bgr = cv2.imread(str(img_path))
@@ -432,6 +437,7 @@ def generate_synthetic_dataset(num_samples: int = 20) -> Tuple[pd.DataFrame, Pat
 def main():
 	parser = argparse.ArgumentParser(description="RetinaSight Stage 4: ResNet50 DR Classifier Training")
 	parser.add_argument("--data-dir", type=str, default=str(KAGGLE_DATASET_DIR), help="Path to APTOS 2019 dataset")
+	parser.add_argument("--dataset", type=str, default="auto", choices=["auto", "aptos", "idrid", "synthetic"], help="Dataset selector")
 	parser.add_argument("--epochs", type=int, default=15, help="Number of training epochs")
 	parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
 	parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
@@ -448,17 +454,36 @@ def main():
 	train_csv_path = data_dir / "train.csv"
 	train_images_dir = data_dir / "train_images"
 
-	if args.smoke_test or not train_csv_path.exists():
-		print("\n[SMOKE TEST] APTOS dataset path not found or --smoke-test enabled.")
+	idrid_csv = Path("D:/SIH2026/Datasets/IDRiD/B. Disease Grading/2. Groundtruths/a. IDRiD_Disease Grading_Training Labels.csv")
+	idrid_imgs = Path("D:/SIH2026/Datasets/IDRiD/B. Disease Grading/1. Original Images/a. Training Set")
+
+	use_idrid = (args.dataset == "idrid") or (args.dataset == "auto" and not train_csv_path.exists() and idrid_csv.exists())
+	use_aptos = (args.dataset == "aptos") or (args.dataset == "auto" and train_csv_path.exists())
+
+	if args.smoke_test or args.dataset == "synthetic":
+		print("\n[SMOKE TEST] Synthetic dataset requested.")
 		print("[SMOKE TEST] Generating local synthetic fundus test dataset for dry-run verification...")
 		df, train_images_dir = generate_synthetic_dataset(num_samples=25)
 		epochs = min(args.epochs, 2)
 		batch_size = 4
-	else:
+	elif use_aptos:
 		print(f"\n[Dataset] Loading APTOS dataset from: {data_dir}")
 		df = pd.read_csv(train_csv_path)
 		epochs = args.epochs
 		batch_size = args.batch_size
+	elif use_idrid:
+		print(f"\n[Dataset] Loading real Indian Diabetic Retinopathy (IDRiD Disease Grading) cohort from: {idrid_csv}")
+		df = pd.read_csv(idrid_csv)
+		df["id_code"] = df["Image name"]
+		df["diagnosis"] = df["Retinopathy grade"]
+		train_images_dir = idrid_imgs
+		epochs = args.epochs
+		batch_size = args.batch_size
+	else:
+		print("\n[SMOKE TEST] Dataset not found. Falling back to synthetic mode.")
+		df, train_images_dir = generate_synthetic_dataset(num_samples=25)
+		epochs = min(args.epochs, 2)
+		batch_size = 4
 
 	print(f"[Dataset] Total samples: {len(df)}")
 	print(f"[Dataset] Class distribution:\n{df['diagnosis'].value_counts().sort_index()}")

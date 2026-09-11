@@ -68,9 +68,14 @@ class Messidor2Dataset(Dataset):
 		self.img_size = img_size
 		self.synthetic_fallback = synthetic_fallback
 
-		images_dir = self.data_dir / "images"
+		images_dir = self.data_dir / "IMAGES"
+		if not images_dir.exists():
+			images_dir = self.data_dir / "images"
 		if not images_dir.exists():
 			images_dir = self.data_dir
+
+		self.images_dir = images_dir
+		self.image_paths = sorted(list(self.images_dir.glob("*.png")) + list(self.images_dir.glob("*.jpg")))
 
 		if csv_path is None:
 			for cand in [self.data_dir / "messidor-2.csv", self.data_dir / "messidor_data.csv", self.data_dir / "messidor2.csv"]:
@@ -82,12 +87,21 @@ class Messidor2Dataset(Dataset):
 		else:
 			csv_path = Path(csv_path)
 
-		if csv_path.exists():
+		self.df = None
+		if csv_path and csv_path.exists():
 			try:
 				self.df = pd.read_csv(csv_path, sep=None, engine="python")
 			except Exception:
-				self.df = pd.read_csv(csv_path)
-			self.images_dir = images_dir
+				try:
+					self.df = pd.read_csv(csv_path, sep=";")
+				except Exception:
+					self.df = pd.read_csv(csv_path)
+
+		if len(self.image_paths) > 0:
+			self.is_synthetic = False
+			self.num_samples = len(self.image_paths)
+			print(f"[INFO] Loaded {self.num_samples} real Messidor-2 fundus images from: {self.images_dir}")
+		elif self.df is not None and len(self.df) > 0:
 			self.is_synthetic = False
 			self.num_samples = len(self.df)
 		elif self.synthetic_fallback:
@@ -115,14 +129,23 @@ class Messidor2Dataset(Dataset):
 			# Referable DR: True for grades 2, 3, 4
 			referable = 1 if dr_grade >= 2 else 0
 		else:
-			row = self.df.iloc[idx]
-			img_name = str(row.get("image_id", row.get("id", f"{idx}.jpg")))
-			dr_grade = int(row.get("adjudicated_dr_grade", row.get("dr_grade", 0)))
-			referable = 1 if dr_grade >= 2 else 0
+			if hasattr(self, "image_paths") and self.image_paths and idx < len(self.image_paths):
+				img_path = self.image_paths[idx]
+				dr_grade = 0
+				referable = 0
+			elif self.df is not None:
+				row = self.df.iloc[idx]
+				img_name = str(row.get("image_id", row.get("id", f"{idx}.jpg")))
+				dr_grade = int(row.get("adjudicated_dr_grade", row.get("dr_grade", 0)))
+				referable = 1 if dr_grade >= 2 else 0
 
-			img_path = self.images_dir / img_name
-			if not img_path.exists():
-				img_path = self.images_dir / f"{img_name}.jpg"
+				img_path = self.images_dir / img_name
+				if not img_path.exists():
+					img_path = self.images_dir / f"{img_name}.jpg"
+			else:
+				img_path = self.images_dir / f"{idx}.jpg"
+				dr_grade = 0
+				referable = 0
 
 			if img_path.exists():
 				img = cv2.imread(str(img_path))

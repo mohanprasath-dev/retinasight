@@ -80,11 +80,32 @@ class IDRiDLesionDataset(Dataset):
 		self.img_size = img_size
 		self.synthetic_fallback = synthetic_fallback
 
-		self.images_dir = self.data_dir / "A. Segmentation" / f"1. Original Images/{split.capitalize()}"
-		self.masks_dir = self.data_dir / "A. Segmentation" / f"2. All Lesion Groundtruths/{split.capitalize()}"
+		# Determine folder names for sets
+		sub_candidates = [
+			"a. Training Set" if split.lower() in ("train", "training") else "b. Testing Set",
+			split.capitalize(),
+			split,
+		]
+		self.images_dir = None
+		for sc in sub_candidates:
+			cand = self.data_dir / "A. Segmentation" / "1. Original Images" / sc
+			if cand.exists():
+				self.images_dir = cand
+				break
+
+		# Check both '2. All Segmentation Groundtruths' and '2. All Lesion Groundtruths'
+		self.masks_dir = None
+		for gt_parent in ["2. All Segmentation Groundtruths", "2. All Lesion Groundtruths"]:
+			for sc in sub_candidates:
+				cand = self.data_dir / "A. Segmentation" / gt_parent / sc
+				if cand.exists():
+					self.masks_dir = cand
+					break
+			if self.masks_dir:
+				break
 
 		# Check if directory exists
-		if self.images_dir.exists():
+		if self.images_dir and self.images_dir.exists():
 			self.image_paths = sorted(list(self.images_dir.glob("*.jpg")) + list(self.images_dir.glob("*.tif")))
 		else:
 			self.image_paths = []
@@ -96,6 +117,7 @@ class IDRiDLesionDataset(Dataset):
 		else:
 			self.is_synthetic = False
 			self.num_samples = len(self.image_paths)
+			print(f"[INFO] Loaded {self.num_samples} real IDRiD images from: {self.images_dir}")
 
 	def __len__(self) -> int:
 		return self.num_samples
@@ -120,21 +142,33 @@ class IDRiDLesionDataset(Dataset):
 			# Aggregate multi-lesion masks
 			mask = np.zeros((self.img_size[0], self.img_size[1]), dtype=np.int64)
 			lesion_map = {
-				1: "1. Microaneurysms",
-				2: "2. Haemorrhages",
-				3: "3. Hard Exudates",
-				4: "4. Soft Exudates",
+				1: ("1. Microaneurysms", ["_MA.tif", "_MA.png", ".tif"]),
+				2: ("2. Haemorrhages", ["_HE.tif", "_HE.png", ".tif"]),
+				3: ("3. Hard Exudates", ["_EX.tif", "_EX.png", ".tif"]),
+				4: ("4. Soft Exudates", ["_SE.tif", "_SE.png", ".tif"]),
 			}
-			for class_idx, folder_name in lesion_map.items():
-				mask_sub_dir = self.masks_dir / folder_name
-				mask_file = mask_sub_dir / f"{base_id}_{folder_name.split('.')[-1].strip()[:2].upper()}.tif"
-				if not mask_file.exists():
-					mask_file = mask_sub_dir / f"{base_id}.tif"
-				if mask_file.exists():
-					m = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
-					if m is not None:
-						m_resized = cv2.resize(m, self.img_size, interpolation=cv2.INTER_NEAREST)
-						mask[m_resized > 127] = class_idx
+			if self.masks_dir:
+				for class_idx, (folder_name, suffixes) in lesion_map.items():
+					mask_sub_dir = self.masks_dir / folder_name
+					if not mask_sub_dir.exists():
+						continue
+					mask_file = None
+					for suf in suffixes:
+						cand = mask_sub_dir / f"{base_id}{suf}"
+						if cand.exists():
+							mask_file = cand
+							break
+					if mask_file is None:
+						# Fallback to prefix matching
+						matches = list(mask_sub_dir.glob(f"{base_id}*"))
+						if matches:
+							mask_file = matches[0]
+
+					if mask_file and mask_file.exists():
+						m = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
+						if m is not None:
+							m_resized = cv2.resize(m, self.img_size, interpolation=cv2.INTER_NEAREST)
+							mask[m_resized > 127] = class_idx
 
 		# Normalize image
 		img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

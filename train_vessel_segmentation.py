@@ -34,8 +34,10 @@ import preprocessing
 
 def resolve_drive_dir() -> Path:
 	candidates = [
+		Path("D:/SIH2026/Datasets/DRIVE/datasets"),
 		Path("D:/SIH2026/Datasets/DRIVE"),
 		Path("D:/SIH2026/Datasets/drive"),
+		Path("../Datasets/DRIVE/datasets"),
 		Path("../Datasets/DRIVE"),
 		Path("datasets/drive"),
 	]
@@ -67,6 +69,8 @@ class DRIVEDataset(Dataset):
 		self.synthetic_fallback = synthetic_fallback
 
 		split_dir = self.data_dir / split
+		if not split_dir.exists() and (self.data_dir / "datasets" / split).exists():
+			split_dir = self.data_dir / "datasets" / split
 		self.images_dir = split_dir / "images"
 		self.manual_dir = split_dir / "1st_manual"
 		self.mask_dir = split_dir / "mask"
@@ -113,7 +117,13 @@ class DRIVEDataset(Dataset):
 				manual_path = self.manual_dir / f"{base_id}_manual1.png"
 			if manual_path.exists():
 				m = cv2.imread(str(manual_path), cv2.IMREAD_GRAYSCALE)
-				vessels = cv2.resize(m, self.img_size, interpolation=cv2.INTER_NEAREST)
+				if m is None:
+					try:
+						from PIL import Image
+						m = np.array(Image.open(manual_path).convert('L'))
+					except Exception:
+						m = None
+				vessels = cv2.resize(m, self.img_size, interpolation=cv2.INTER_NEAREST) if m is not None else np.zeros(self.img_size, dtype=np.uint8)
 			else:
 				vessels = np.zeros(self.img_size, dtype=np.uint8)
 
@@ -121,9 +131,19 @@ class DRIVEDataset(Dataset):
 			mask_path = self.mask_dir / f"{base_id}_{self.split}_mask.gif"
 			if not mask_path.exists():
 				mask_path = self.mask_dir / f"{base_id}_mask.png"
+			if not mask_path.exists():
+				matches = list(self.mask_dir.glob(f"{base_id}*"))
+				if matches:
+					mask_path = matches[0]
 			if mask_path.exists():
 				fov = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-				mask_retina = cv2.resize(fov, self.img_size, interpolation=cv2.INTER_NEAREST)
+				if fov is None:
+					try:
+						from PIL import Image
+						fov = np.array(Image.open(mask_path).convert('L'))
+					except Exception:
+						fov = None
+				mask_retina = cv2.resize(fov, self.img_size, interpolation=cv2.INTER_NEAREST) if fov is not None else np.ones(self.img_size, dtype=np.uint8) * 255
 			else:
 				mask_retina = np.ones(self.img_size, dtype=np.uint8) * 255
 
