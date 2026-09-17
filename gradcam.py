@@ -21,6 +21,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision.models as models
 import torchvision.transforms as transforms
 
 import preprocessing
@@ -124,8 +125,6 @@ def load_classifier_model(model_input: Union[str, Path, nn.Module], device: torc
 		return model_input.to(device).eval()
 
 	model_path = Path(model_input)
-	model = train_dr_classifier.build_resnet50_classifier(num_classes=5, pretrained=False).to(device)
-
 	# If ONNX file was specified, check for companion PyTorch .pth weights
 	if model_path.suffix.lower() == ".onnx":
 		companion_pth = model_path.with_suffix(".pth")
@@ -135,26 +134,31 @@ def load_classifier_model(model_input: Union[str, Path, nn.Module], device: torc
 			model_path = companion_pth
 		elif alt_pth.exists():
 			model_path = alt_pth
-		else:
-			print(
-				f"[NOTE] Pure ONNX model specified ({model_path.name}). "
-				"Initializing ResNet50 architecture with default ImageNet feature extractor for Grad-CAM."
-			)
-			model = train_dr_classifier.build_resnet50_classifier(num_classes=5, pretrained=True).to(device)
-			return model.eval()
 
+	checkpoint = None
 	if model_path.exists():
 		checkpoint = torch.load(str(model_path), map_location=device)
-		if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-			model.load_state_dict(checkpoint["state_dict"])
-		elif isinstance(checkpoint, dict):
-			model.load_state_dict(checkpoint)
-		print(f"[Grad-CAM] Loaded model checkpoint from: {model_path}")
+
+	state = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+
+	if state is not None and "fc.weight" in state:
+		model = models.resnet50(weights=None)
+		model.fc = nn.Linear(2048, 5)
+		model.load_state_dict(state)
+		model.to(device)
+		print(f"[Grad-CAM] Loaded standard linear head checkpoint from: {model_path}")
+		return model.eval()
+	elif state is not None:
+		model = train_dr_classifier.build_resnet50_classifier(num_classes=5, pretrained=False).to(device)
+		model.load_state_dict(state)
+		print(f"[Grad-CAM] Loaded sequential head checkpoint from: {model_path}")
+		return model.eval()
 	else:
 		print(f"[Grad-CAM] Checkpoint {model_path} not found. Using pretrained ResNet50 backbone.")
-		model = train_dr_classifier.build_resnet50_classifier(num_classes=5, pretrained=True).to(device)
-
-	return model.eval()
+		model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+		model.fc = nn.Linear(2048, 5)
+		model.to(device)
+		return model.eval()
 
 
 def generate_heatmap(

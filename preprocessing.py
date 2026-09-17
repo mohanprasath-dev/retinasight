@@ -364,91 +364,136 @@ def segment_vessels(image: Union[str, Path, np.ndarray]) -> np.ndarray:
 	return vessels
 
 
-def detect_microaneurysms(image: Union[str, Path, np.ndarray], mask: Optional[np.ndarray] = None) -> np.ndarray:
-	"""Placeholder stub: Detect small reddish circular microaneurysms via morphological blob detection.
-
-	Note: Classical placeholder for MVP; deep segmentation model (IDRiD trained) planned for full production.
+def detect_microaneurysms(
+	image: Union[str, Path, np.ndarray],
+	mask: Optional[np.ndarray] = None,
+	vessels_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+	"""Detect small reddish circular microaneurysms via morphological blob detection.
+	Anatomically subtracts blood vessels to prevent normal capillary crossings from false-positive triggering.
 	"""
 	img = load_image(image)
 	if mask is None:
 		mask, _ = get_retina_mask(img)
 
-	g = img[:, :, 1]
-	# Small circular structuring element for sub-pixel/tiny lesions
+	if vessels_mask is None:
+		vessels_mask = segment_vessels(img)
+
+	g = img[:, :, 1] if len(img.shape) == 3 else img
 	kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 	blackhat = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, kernel)
 
-	_, ma_thresh = cv2.threshold(blackhat, 15, 255, cv2.THRESH_BINARY)
-	mask_eroded = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
-	ma_mask = cv2.bitwise_and(ma_thresh, ma_thresh, mask=mask_eroded)
+	_, ma_thresh = cv2.threshold(blackhat, 22, 255, cv2.THRESH_BINARY)
+	
+	retina_roi = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20)))
+	vessels_dilated = cv2.dilate(vessels_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+	clean_roi = cv2.bitwise_and(retina_roi, cv2.bitwise_not(vessels_dilated))
+
+	ma_cand = cv2.bitwise_and(ma_thresh, ma_thresh, mask=clean_roi)
+
+	num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(ma_cand, connectivity=8)
+	ma_mask = np.zeros_like(ma_cand)
+	for i in range(1, num_labels):
+		if 2 <= stats[i, cv2.CC_STAT_AREA] <= 45:
+			ma_mask[labels == i] = 255
 
 	return ma_mask
 
 
-def detect_exudates(image: Union[str, Path, np.ndarray], mask: Optional[np.ndarray] = None) -> np.ndarray:
-	"""Placeholder stub: Detect bright yellowish hard/soft exudates via luminance thresholding.
-
-	Note: Classical placeholder for MVP; deep segmentation model planned for full production.
+def detect_exudates(
+	image: Union[str, Path, np.ndarray],
+	mask: Optional[np.ndarray] = None,
+	optic_disc_info: Optional[Dict] = None,
+	vessels_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+	"""Detect bright yellowish hard/soft exudates via local background contrast thresholding.
+	Anatomically masks the physiological Optic Disc to prevent massive false-positive overcounting.
 	"""
 	img = load_image(image)
 	if mask is None:
 		mask, _ = get_retina_mask(img)
 
-	# Exudates have high intensity in both red and green channels
-	g = img[:, :, 1].astype(np.float32)
-	r = img[:, :, 2].astype(np.float32)
-	bright_response = (g * 0.5 + r * 0.5).astype(np.uint8)
+	if optic_disc_info is None:
+		optic_disc_info = locate_optic_disc_and_fovea(img, mask)
 
-	clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-	bright_clahe = clahe.apply(bright_response)
+	g = img[:, :, 1] if len(img.shape) == 3 else img
+	r = img[:, :, 2] if len(img.shape) == 3 else img
 
-	# Threshold high intensity regions
-	_, ex_thresh = cv2.threshold(bright_clahe, 195, 255, cv2.THRESH_BINARY)
+	retina_roi = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30)))
+	if optic_disc_info and "optic_disc_center" in optic_disc_info:
+		od_x, od_y = optic_disc_info["optic_disc_center"]
+		od_r = int(optic_disc_info.get("optic_disc_radius", 30) * 1.5)
+		cv2.circle(retina_roi, (int(od_x), int(od_y)), od_r, 0, -1)
 
-	mask_eroded = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
-	exudates_mask = cv2.bitwise_and(ex_thresh, ex_thresh, mask=mask_eroded)
+	if vessels_mask is not None:
+		vessels_dilated = cv2.dilate(vessels_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+		retina_roi = cv2.bitwise_and(retina_roi, cv2.bitwise_not(vessels_dilated))
+
+	local_mean = cv2.GaussianBlur(g, (35, 35), 0)
+	ex_diff = g.astype(np.int16) - local_mean.astype(np.int16)
+	ex_cand = ((ex_diff > 35) & (g > 140) & (r > 165) & (retina_roi > 0)).astype(np.uint8) * 255
+
+	num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(ex_cand, connectivity=8)
+	exudates_mask = np.zeros_like(ex_cand)
+	for i in range(1, num_labels):
+		if 3 <= stats[i, cv2.CC_STAT_AREA] <= 1500:
+			exudates_mask[labels == i] = 255
 
 	return exudates_mask
 
 
-def detect_hemorrhages(image: Union[str, Path, np.ndarray], mask: Optional[np.ndarray] = None) -> np.ndarray:
-	"""Placeholder stub: Detect dark red blotch hemorrhages via color thresholding.
-
-	Note: Classical placeholder for MVP; deep segmentation model planned for full production.
+def detect_hemorrhages(
+	image: Union[str, Path, np.ndarray],
+	mask: Optional[np.ndarray] = None,
+	vessels_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+	"""Detect dark red blotch intraretinal hemorrhages via color and morphological filtering.
+	Anatomically subtracts blood vessels to prevent vascular branches from being counted as hemorrhages.
 	"""
 	img = load_image(image)
 	if mask is None:
 		mask, _ = get_retina_mask(img)
 
-	g = img[:, :, 1]
-	# Hemorrhages are larger dark regions (larger kernel than microaneurysms)
-	kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-	blackhat = cv2.morphologyEx(g, cv2.MORPH_BLACKHAT, kernel)
+	if vessels_mask is None:
+		vessels_mask = segment_vessels(img)
 
-	_, hem_thresh = cv2.threshold(blackhat, 25, 255, cv2.THRESH_BINARY)
-	mask_eroded = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
-	hemorrhages_mask = cv2.bitwise_and(hem_thresh, hem_thresh, mask=mask_eroded)
+	g = img[:, :, 1] if len(img.shape) == 3 else img
+	
+	retina_roi = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20)))
+	vessels_dilated = cv2.dilate(vessels_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+	clean_roi = cv2.bitwise_and(retina_roi, cv2.bitwise_not(vessels_dilated))
+
+	local_mean = cv2.GaussianBlur(g, (35, 35), 0)
+	dark_diff = local_mean.astype(np.int16) - g.astype(np.int16)
+	hem_cand = ((dark_diff > 30) & (g < 130) & (clean_roi > 0)).astype(np.uint8) * 255
+
+	num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(hem_cand, connectivity=8)
+	hemorrhages_mask = np.zeros_like(hem_cand)
+	for i in range(1, num_labels):
+		if 8 <= stats[i, cv2.CC_STAT_AREA] <= 2500:
+			hemorrhages_mask[labels == i] = 255
 
 	return hemorrhages_mask
 
 
 def segment(image: Union[str, Path, np.ndarray]) -> Dict[str, np.ndarray]:
-	"""Stage 3 Segmentation: Segment blood vessels and identify lesion candidates.
+	"""Stage 3 Segmentation: Segment blood vessels and identify lesion candidates with anatomical masking.
 
 	Returns:
 		dict containing:
 			'vessels': np.ndarray binary mask (uint8, 0 or 255)
-			'microaneurysms': np.ndarray binary mask placeholder
-			'exudates': np.ndarray binary mask placeholder
-			'hemorrhages': np.ndarray binary mask placeholder
+			'microaneurysms': np.ndarray binary mask with vessel subtraction
+			'exudates': np.ndarray binary mask with optic disc masking
+			'hemorrhages': np.ndarray binary mask with vessel subtraction
 	"""
 	img = load_image(image)
 	mask, _ = get_retina_mask(img)
 
 	vessels = segment_vessels(img)
-	microaneurysms = detect_microaneurysms(img, mask)
-	exudates = detect_exudates(img, mask)
-	hemorrhages = detect_hemorrhages(img, mask)
+	anatomy = locate_optic_disc_and_fovea(img, mask)
+	microaneurysms = detect_microaneurysms(img, mask, vessels_mask=vessels)
+	exudates = detect_exudates(img, mask, optic_disc_info=anatomy, vessels_mask=vessels)
+	hemorrhages = detect_hemorrhages(img, mask, vessels_mask=vessels)
 
 	return {
 		"vessels": vessels,

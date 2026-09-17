@@ -60,6 +60,8 @@ mobile_stub/build/
 *.onnx
 outputs/
 *.h5
+cache/
+*.npz
 assets/smoke_test_data/
 
 # Testing & Coverage
