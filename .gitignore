@@ -77,3 +77,7 @@ htmlcov/
 *~
 .DS_Store
 Thumbs.db
+
+# Internal Hackathon / Presentation materials (not to be pushed)
+.presentation/
+.presentation*
