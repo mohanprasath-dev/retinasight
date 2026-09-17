@@ -29,6 +29,11 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
 
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
 import preprocessing
 
 
@@ -37,6 +42,7 @@ def resolve_drive_dir() -> Path:
 		Path("D:/SIH2026/Datasets/DRIVE/datasets"),
 		Path("D:/SIH2026/Datasets/DRIVE"),
 		Path("D:/SIH2026/Datasets/drive"),
+		PROJECT_ROOT / "datasets" / "drive",
 		Path("../Datasets/DRIVE/datasets"),
 		Path("../Datasets/DRIVE"),
 		Path("datasets/drive"),
@@ -44,7 +50,7 @@ def resolve_drive_dir() -> Path:
 	for c in candidates:
 		if c.exists():
 			return c
-	return Path("datasets/drive")
+	return PROJECT_ROOT / "datasets" / "drive"
 
 DEFAULT_DRIVE_DIR = resolve_drive_dir()
 IMAGE_SIZE = (512, 512)

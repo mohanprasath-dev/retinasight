@@ -21,7 +21,7 @@ DATASET_CONFIG = {
 		"dir": "datasets/aptos2019",
 		"external_aliases": ["aptos2019", "APTOS", "aptos"],
 		"expected_files": ["train.csv", "train_images"],
-		"script": "train_dr_classifier.py",
+		"script": "training/train_dr_classifier.py",
 		"purpose": "Primary 5-Class ICDR Severity Classification (ResNet-50)",
 	},
 	"idrid": {
@@ -30,7 +30,7 @@ DATASET_CONFIG = {
 		"dir": "datasets/idrid",
 		"external_aliases": ["IDRiD", "idrid"],
 		"expected_files": ["A. Segmentation"],
-		"script": "train_idrid_lesions.py",
+		"script": "training/train_idrid_lesions.py",
 		"purpose": "Pixel-Level Lesion Ground-Truth & Grad-CAM IoU Alignment",
 	},
 	"drive": {
@@ -39,7 +39,7 @@ DATASET_CONFIG = {
 		"dir": "datasets/drive",
 		"external_aliases": ["DRIVE", "drive"],
 		"expected_files": ["datasets", "training", "test", "datasets.zip"],
-		"script": "train_vessel_segmentation.py",
+		"script": "training/train_vessel_segmentation.py",
 		"purpose": "Vascular Tree Segmentation Calibration (Dice >= 0.82)",
 	},
 	"messidor2": {
@@ -48,7 +48,7 @@ DATASET_CONFIG = {
 		"dir": "datasets/messidor2",
 		"external_aliases": ["Messidor-2", "messidor2", "messidor"],
 		"expected_files": ["images", "messidor-2.csv", "messidor_data.csv"],
-		"script": "train_messidor_generalization.py",
+		"script": "training/train_messidor_generalization.py",
 		"purpose": "External Multi-Center Generalization & DME Assessment",
 	},
 }

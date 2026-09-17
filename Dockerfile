@@ -23,7 +23,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend files and models
-COPY preprocessing.py gradcam.py train_dr_classifier.py main.py ./
+COPY preprocessing.py gradcam.py main.py ./
+COPY training/ ./training/
+COPY scripts/ ./scripts/
 COPY retinasight_resnet50.onnx retinasight_resnet50.pth ./
 COPY matlab/ ./matlab/
 COPY docs/ ./docs/

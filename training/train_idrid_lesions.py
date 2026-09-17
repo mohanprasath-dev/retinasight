@@ -33,6 +33,11 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
 
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
 
 # ------------------------------------------------------------------------------
 # 1. Constants & Lesion Classes
@@ -51,13 +56,14 @@ def resolve_idrid_dir() -> Path:
 	candidates = [
 		Path("D:/SIH2026/Datasets/IDRiD"),
 		Path("D:/SIH2026/Datasets/idrid"),
+		PROJECT_ROOT / "datasets" / "idrid",
 		Path("../Datasets/IDRiD"),
 		Path("datasets/idrid"),
 	]
 	for c in candidates:
 		if c.exists():
 			return c
-	return Path("datasets/idrid")
+	return PROJECT_ROOT / "datasets" / "idrid"
 
 DEFAULT_IDRID_DIR = resolve_idrid_dir()
 

@@ -74,7 +74,7 @@ graph TD
 | **3. Segmentation** | `preprocessing.segment_vessels()` & `locate_optic_disc_and_fovea()` | Morphological black-hat transform isolates dark tubular vessels; adaptive Gaussian thresholding cleans capillaries. Locates optic disc via brightest circular convergence in red/green channels; offsets temporally by $2.5\times$ disc diameter to pinpoint fovea. | Vascular mask, optic disc $(X, Y, R)$, fovea $(X, Y, R)$, composite overlay. |
 | **4. DR Classification** | `main.py` via `ONNX Runtime` | ResNet50 backbone fine-tuned on APTOS 2019 dataset using class-weighted cross-entropy loss. Exported as `retinasight_resnet50.onnx` (93.6MB) with ImageNet normalization. | 5-class ICDR probabilities (Grade 0–4) in 1.8s. |
 | **5. Explainability** | `gradcam.generate_heatmap()` | Hooks forward activation and backward gradients on `layer4` (last residual bottleneck). Computes channel-wise importance weights $\alpha_k^c$, applies ReLU, upsamples to native resolution, and strictly masks heat outside retinal FOV ($0.0$ leakage). | Jet colormap heatmap overlay. |
-| **6. District Rollout** | `render_simulink_mockup.py` | Discrete-event queuing simulation of district healthcare rollout (Pop: 1.5M, 30 PHCs, 28 operators, 684 screenings/day, 96.0% tertiary caseload reduction, ₹1.42 Cr public savings). | 300 DPI high-resolution diagram `docs/simulink_mockup.png`. |
+| **6. District Rollout** | `scripts/render_simulink_mockup.py` | Discrete-event queuing simulation of district healthcare rollout (Pop: 1.5M, 30 PHCs, 28 operators, 684 screenings/day, 96.0% tertiary caseload reduction, ₹1.42 Cr public savings). | 300 DPI high-resolution diagram `docs/simulink_mockup.png`. |
 
 ---
 
@@ -114,11 +114,11 @@ Because Problem Statement 26038 is sponsored by MathWorks, RetinaSight was speci
 ### Q1: Where exactly is your training data coming from? Is it synthetic or real?
 > **Mohan's Defense:**  
 > *"Our system actively utilizes all **4 gold-standard Diabetic Retinopathy datasets** across distinct pipeline tiers:  
-> 1. **APTOS 2019 (Aravind Eye Hospital, Tamil Nadu):** 3,662 fundus photographs used to train our primary ResNet-50 5-class ICDR classifier (`train_dr_classifier.py`), achieving a Quadratic Weighted Kappa of **0.892** and 94.2% referable sensitivity.  
-> 2. **IDRiD (Dr. Ramanjit Sihota Clinic, Maharashtra):** 516 images with pixel-level ground truth masks for Microaneurysms, Hemorrhages, and Exudates. Used in `train_idrid_lesions.py` to mathematically prove that our Grad-CAM heatmaps overlap with true ophthalmologist annotations (85.4% Pointing Game hit rate, mean IoU 0.616).  
-> 3. **DRIVE (Utrecht Medical Center):** 40 gold-standard fundus scans with double manual expert tracings. Used in `train_vessel_segmentation.py` to benchmark our real-time vascular tree extraction (0.824 Dice score, 95.3% pixel accuracy).  
-> 4. **Messidor-2 (French University Hospitals):** 1,748 external clinical scans used in `train_messidor_generalization.py` to prove zero racial or demographic overfitting (0.937 Referable DR AUC with only 2.1% cross-continent domain drop).  
-> Furthermore, for normal cameras and smartphones, our Fast Marching Telea inpainting suppresses corneal flash glare so community health workers can screen using clip-on ophthalmoscopy lenses."*
+> 1. **APTOS 2019 (Aravind Eye Hospital, Tamil Nadu):** 3,662 fundus photographs used to train our primary ResNet-50 5-class ICDR classifier (`training/train_dr_classifier.py`), achieving a Quadratic Weighted Kappa of **0.892** and 94.2% referable sensitivity.  
+> 2. **IDRiD (Dr. Ramanjit Sihota Clinic, Maharashtra):** 516 images with pixel-level ground truth masks for Microaneurysms, Hemorrhages, and Exudates. Used in `training/train_idrid_lesions.py` to mathematically prove that our Grad-CAM heatmaps overlap with true ophthalmologist annotations (85.4% Pointing Game hit rate, mean IoU 0.616).  
+> 3. **DRIVE (Utrecht Medical Center):** 40 gold-standard fundus scans with double manual expert tracings. Used in `training/train_vessel_segmentation.py` to benchmark our real-time vascular tree extraction (0.824 Dice score, 95.3% pixel accuracy).  
+> 4. **Messidor-2 (French University Hospitals):** 1,748 external clinical scans used in `training/train_messidor_generalization.py` to prove zero racial or demographic overfitting (0.937 Referable DR AUC with only 2.1% cross-continent domain drop).  
+> Furthermore, our preprocessing pipeline normalizes illumination and contrast on basic fundus-camera images so community health workers can screen reliably in low-resource clinics."*
 
 ### Q2: This problem is sponsored by MathWorks. Why is this in Python/PyTorch? Can it run in MATLAB?
 > **Mohan's Defense:**  
@@ -149,11 +149,11 @@ Because Problem Statement 26038 is sponsored by MathWorks, RetinaSight was speci
 | **Start FastAPI Backend (with UI on :8000)** | `.\.venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000` |
 | **Start React UI Dev Server (:5173)** | `cd frontend; npm run dev` |
 | **Audit & Scaffold All 4 Datasets** | `python scripts/setup_datasets.py --verify` |
-| **Train/Validate on APTOS 2019** | `python train_dr_classifier.py --smoke-test` |
-| **Benchmark on IDRiD Lesions (Explainability IoU)**| `python train_idrid_lesions.py --validate_explainability` |
-| **Benchmark on DRIVE Vessels (Dice & Accuracy)** | `python train_vessel_segmentation.py --benchmark` |
-| **Benchmark on Messidor-2 (External AUC)** | `python train_messidor_generalization.py --benchmark` |
-| **Test Single-Image Prediction** | `curl.exe -X POST "http://127.0.0.1:8000/predict" -F "file=@frontend\public\samples\sample_smartphone_normal.png"` |
+| **Train/Validate on APTOS 2019** | `python training/train_dr_classifier.py --smoke-test` |
+| **Benchmark on IDRiD Lesions (Explainability IoU)**| `python training/train_idrid_lesions.py --validate_explainability` |
+| **Benchmark on DRIVE Vessels (Dice & Accuracy)** | `python training/train_vessel_segmentation.py --benchmark` |
+| **Benchmark on Messidor-2 (External AUC)** | `python training/train_messidor_generalization.py --benchmark` |
+| **Test Single-Image Prediction** | `curl.exe -X POST "http://127.0.0.1:8000/predict" -F "file=@frontend\public\samples\sample_messidor_grade0.png"` |
 | **Run MATLAB Pipeline** | Open MATLAB -> `cd retinasight/matlab` -> `retinasight_pipeline()` |
 | **View Rollout Architecture** | Open `docs/simulink_mockup.png` (300 DPI high-res) |
 

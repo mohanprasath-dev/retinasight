@@ -246,7 +246,8 @@ def generate_simulink_diagram():
 
     plt.tight_layout()
 
-    out_dir = Path("docs")
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    out_dir = PROJECT_ROOT / "docs"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "simulink_mockup.png"
     plt.savefig(str(out_path), dpi=300, bbox_inches='tight')

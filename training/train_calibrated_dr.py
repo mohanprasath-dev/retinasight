@@ -27,8 +27,16 @@ import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms as transforms
 
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
 import preprocessing
-import train_dr_classifier
+try:
+	from training import train_dr_classifier
+except ImportError:
+	import train_dr_classifier
 
 
 ICDR_CLASSES = {
@@ -41,9 +49,9 @@ ICDR_CLASSES = {
 
 APTOS_DIR = Path("D:/SIH2026/Datasets/aptos2019")
 IDRID_DIR = Path("D:/SIH2026/Datasets/IDRiD/B. Disease Grading")
-OUTPUT_PTH = Path("retinasight_resnet50.pth")
-OUTPUT_ONNX = Path("retinasight_resnet50.onnx")
-CACHE_DIR = Path("cache")
+OUTPUT_PTH = PROJECT_ROOT / "retinasight_resnet50.pth"
+OUTPUT_ONNX = PROJECT_ROOT / "retinasight_resnet50.onnx"
+CACHE_DIR = PROJECT_ROOT / "cache"
 
 
 def load_balanced_cohort(samples_per_class: int = 120) -> Tuple[pd.DataFrame, Dict[str, Path]]:

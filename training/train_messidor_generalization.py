@@ -32,20 +32,29 @@ from torch.utils.data import DataLoader, Dataset
 import torchvision.models as models
 import torchvision.transforms as transforms
 
-import train_dr_classifier
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+	sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+	from training import train_dr_classifier
+except ImportError:
+	import train_dr_classifier
 
 
 def resolve_messidor_dir() -> Path:
 	candidates = [
 		Path("D:/SIH2026/Datasets/Messidor-2"),
 		Path("D:/SIH2026/Datasets/messidor2"),
+		PROJECT_ROOT / "datasets" / "messidor2",
 		Path("../Datasets/Messidor-2"),
 		Path("datasets/messidor2"),
 	]
 	for c in candidates:
 		if c.exists():
 			return c
-	return Path("datasets/messidor2")
+	return PROJECT_ROOT / "datasets" / "messidor2"
 
 DEFAULT_MESSIDOR_DIR = resolve_messidor_dir()
 IMAGE_SIZE = (256, 256)

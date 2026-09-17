@@ -91,7 +91,14 @@ retinasight/
 ├── tests/                    # Automated Test Suite & Verifications
 │   ├── __init__.py           # Test package initialization
 │   └── test_preprocessing.py # RS-01 Acceptance criteria test suite (quality, CLAHE, vessels)
-├── test_preprocessing.py     # Root test runner forwarder (for quick execution)
+│
+├── training/                 # Clinical Model Training & Dataset Calibration Suite
+│   ├── __init__.py           # Training package initialization
+│   ├── train_dr_classifier.py         # Primary APTOS 2019 ResNet-50 5-class classifier
+│   ├── train_calibrated_dr.py         # Hybrid ordinal regression & threshold calibration
+│   ├── train_idrid_lesions.py         # IDRiD multi-lesion segmentation & Grad-CAM verification
+│   ├── train_vessel_segmentation.py   # DRIVE blood vessel segmentation calibration
+│   └── train_messidor_generalization.py # Messidor-2 multi-center generalization audit
 │
 ├── matlab/                   # MathWorks Interoperability Suite
 │   ├── retinasight_pipeline.m         # Native MATLAB pipeline script (CLAHE + ONNX + gradCAM)
@@ -104,9 +111,10 @@ retinasight/
 │   ├── retinasight_kaggle_training.ipynb # Jupyter notebook ready to upload to Kaggle
 │   └── retinasight_kaggle_training.py    # Direct script for Kaggle Tesla T4/P100 training
 │
-├── scripts/                  # Scaffolding & Data Download Helpers
-│   ├── setup_datasets.py     # Multi-dataset scaffold & integrity verifier (APTOS, IDRiD, DRIVE, Messidor)
-│   └── download_kaggle_aptos.py # Automated Kaggle APTOS downloader with space checks
+├── scripts/                  # Scaffolding, Download, and Mockup Generation
+│   ├── setup_datasets.py         # Multi-dataset scaffold & integrity verifier
+│   ├── download_kaggle_aptos.py  # Automated Kaggle APTOS downloader with space checks
+│   └── render_simulink_mockup.py # High-res Simulink district rollout diagram renderer
 │
 ├── frontend/                 # Clinical Light-Theme React (Vite) specialist review web app
 │   ├── src/App.jsx           # Multi-layer viewer, benchmark modal, camp roster, referral slip
