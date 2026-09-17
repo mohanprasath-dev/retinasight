@@ -25,7 +25,10 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 
 import preprocessing
-import train_dr_classifier
+try:
+	from training import train_dr_classifier
+except ImportError:
+	import train_dr_classifier
 
 
 ICDR_CLASSES = {

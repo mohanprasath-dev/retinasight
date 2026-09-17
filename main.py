@@ -23,10 +23,12 @@ import numpy as np
 import onnxruntime as ort
 import torch
 import torchvision.transforms as transforms
-
 import gradcam
 import preprocessing
-import train_dr_classifier
+try:
+	from training import train_dr_classifier
+except ImportError:
+	import train_dr_classifier
 
 
 # ------------------------------------------------------------------------------
