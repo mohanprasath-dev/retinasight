@@ -28,7 +28,8 @@ This automatically launches MATLAB R2026a, navigates to the `matlab/` directory,
 1. Open MATLAB R2026a.
 2. In the MATLAB Command Window, enter:
    ```matlab
-   cd('d:/SIH2026/retinasight/matlab');
+   % Navigate to the matlab folder of your cloned repository:
+   cd matlab; 
    results = retinasight_pipeline();
    ```
 3. To test with specific patient fundus images:

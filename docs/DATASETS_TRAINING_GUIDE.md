@@ -10,10 +10,10 @@ RetinaSight incorporates all **4 gold-standard Diabetic Retinopathy clinical dat
 
 | # | Dataset | Origin & Clinicians | Scope & Volume | Architectural Purpose in RetinaSight | Dedicated Pipeline Script |
 |---|---|---|---|---|---|
-| **1** | **APTOS 2019 Blindness Detection** | Aravind Eye Hospital, Tamil Nadu, India | 3,662 fundus photographs | **Primary 5-Class ICDR Severity Classifier**: ResNet-50 trained on Indian eyes to classify Levels 0–4 with inverse-frequency weighted cross-entropy. | [`train_dr_classifier.py`](file:///d:/SIH2026/retinasight/train_dr_classifier.py) |
-| **2** | **IDRiD** (Indian Diabetic Retinopathy Image Dataset) | Dr. Ramanjit Sihota Clinic, Nanded, Maharashtra, India | 516 fundus images with pixel-level ground-truth masks | **Lesion Segmentation & Explainability Validation**: Ground-truth masks for Microaneurysms, Hemorrhages, and Hard/Soft Exudates to validate Grad-CAM pointing accuracy. | [`train_idrid_lesions.py`](file:///d:/SIH2026/retinasight/train_idrid_lesions.py) |
-| **3** | **DRIVE** (Digital Retinal Images for Vessel Extraction) | Utrecht University Medical Center | 40 fundus images (20 train, 20 test) | **Vascular Tree Segmentation Calibration**: Double manual ophthalmologist tracings used to calibrate classical green-channel CLAHE + black-hat segmentation. | [`train_vessel_segmentation.py`](file:///d:/SIH2026/retinasight/train_vessel_segmentation.py) |
-| **4** | **Messidor-2** | University Hospitals of Brest, Paris, & Saint-Étienne, France | 1,748 fundus photographs (874 patients) | **External Multi-Center Generalization**: Proves zero racial or optical bias when testing our Indian-trained model on European populations. | [`train_messidor_generalization.py`](file:///d:/SIH2026/retinasight/train_messidor_generalization.py) |
+| **1** | **APTOS 2019 Blindness Detection** | Aravind Eye Hospital, Tamil Nadu, India | 3,662 fundus photographs | **Primary 5-Class ICDR Severity Classifier**: ResNet-50 trained on Indian eyes to classify Levels 0–4 with inverse-frequency weighted cross-entropy. | [`train_dr_classifier.py`](../train_dr_classifier.py) |
+| **2** | **IDRiD** (Indian Diabetic Retinopathy Image Dataset) | Dr. Ramanjit Sihota Clinic, Nanded, Maharashtra, India | 516 fundus images with pixel-level ground-truth masks | **Lesion Segmentation & Explainability Validation**: Ground-truth masks for Microaneurysms, Hemorrhages, and Hard/Soft Exudates to validate Grad-CAM pointing accuracy. | [`train_idrid_lesions.py`](../train_idrid_lesions.py) |
+| **3** | **DRIVE** (Digital Retinal Images for Vessel Extraction) | Utrecht University Medical Center | 40 fundus images (20 train, 20 test) | **Vascular Tree Segmentation Calibration**: Double manual ophthalmologist tracings used to calibrate classical green-channel CLAHE + black-hat segmentation. | [`train_vessel_segmentation.py`](../train_vessel_segmentation.py) |
+| **4** | **Messidor-2** | University Hospitals of Brest, Paris, & Saint-Étienne, France | 1,748 fundus photographs (874 patients) | **External Multi-Center Generalization**: Proves zero racial or optical bias when testing our Indian-trained model on European populations. | [`train_messidor_generalization.py`](../train_messidor_generalization.py) |
 
 ---
 
@@ -26,7 +26,7 @@ python scripts/setup_datasets.py
 
 Standard directory hierarchy:
 ```
-d:/SIH2026/retinasight/
+retinasight/
 ├── datasets/
 │   ├── aptos2019/
 │   │   ├── train.csv

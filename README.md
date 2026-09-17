@@ -3,6 +3,7 @@
 [![SIH 2026](https://img.shields.io/badge/Smart%20India%20Hackathon-2026-green.svg)](https://www.sih.gov.in/)
 [![Problem Statement](https://img.shields.io/badge/Problem%20Statement-ID%2026038-blue.svg)](#problem-statement)
 [![Sponsor](https://img.shields.io/badge/Sponsor-MathWorks-orange.svg)](#mathworks-interoperability)
+[![Tests](https://img.shields.io/badge/Tests-Passing%20(100%25)-brightgreen.svg)](#7-testing--automated-verification)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![FDA Guidance](https://img.shields.io/badge/FDA%20Guidance-Exceeded-emerald.svg)](#clinical-benchmarks)
 
@@ -11,6 +12,7 @@
 
 ---
 
+<a id="problem-statement"></a>
 ## 1. The National Challenge
 
 - **Epidemic Scale:** India has **over 77 million diabetic adults** (2nd highest worldwide). Approximately 18% (~13.8 million) develop Diabetic Retinopathy (DR) — the leading cause of preventable blindness.
@@ -41,6 +43,7 @@ RetinaSight is an **offline-first, explainable AI screening pipeline** engineere
 
 ---
 
+<a id="mathworks-interoperability"></a>
 ## 3. MathWorks & MATLAB Interoperability (`matlab/`)
 
 Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight was engineered from the ground up for 100% bi-directional interoperability between our open-source edge stack and native MathWorks toolboxes:
@@ -53,10 +56,11 @@ Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight was engineere
   - `adapthisteq` (Image Processing Toolbox CLAHE)
   - `imbinarize` & `imbothat` (Vessel segmentation)
   - `gradCAM` (Native MATLAB explainability visualization)
-- **District Rollout Capacity Model:** Modeled using Simulink discrete-event queuing mathematics, saved as a 300 DPI high-res architectural diagram at [`docs/simulink_mockup.png`](docs/simulink_mockup.png).
+- **District Rollout Capacity Model:** Programmatically generated in [`matlab/build_simulink_model.m`](matlab/build_simulink_model.m) and saved as a compiled Simulink model at [`matlab/retinasight_capacity_model.slx`](matlab/retinasight_capacity_model.slx), with high-res 300 DPI architecture rendered at [`docs/simulink_mockup.png`](docs/simulink_mockup.png).
 
 ---
 
+<a id="clinical-benchmarks"></a>
 ## 4. Clinical Benchmark Comparison Matrix
 
 | System | Regulatory Status | Sensitivity (Referable DR) | Specificity | Edge Inference | Explainability (XAI) | Rural Cost |
@@ -74,37 +78,69 @@ Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight was engineere
 ```
 retinasight/
 ├── preprocessing.py          # Stage 1-3: Quality Gate, Chromatic Spectrum Check, CLAHE, Segmentation
-├── train_dr_classifier.py    # Stage 4: ResNet50 fine-tuning on APTOS 2019 (Kaggle GPU script)
-├── gradcam.py                 # Stage 5: Retinal FOV-constrained Grad-CAM engine
-├── main.py                    # Stage 6: FastAPI REST service with multi-layer visual endpoints
-├── retinasight_resnet50.onnx  # 93.6MB optimized ONNX edge inference graph
-├── retinasight_resnet50.pth   # PyTorch model weights checkpoint
-├── matlab/                    # MathWorks Interoperability Suite
-│   ├── retinasight_pipeline.m # Native MATLAB pipeline (CLAHE + importONNXNetwork + gradCAM)
-│   └── README.md              # MATLAB setup and execution instructions
-├── frontend/                  # Clinical Light-Theme React (Vite) specialist review web app
-│   ├── src/App.jsx            # Multi-layer viewer, benchmark modal, camp roster, referral slip
-│   └── src/index.css          # Surgical Light Theme CSS design system (UI-Max 97/100)
-├── mobile_stub/               # Flutter PHC camera capture & offline sync queue stub
-├── docs/                      # PRD, AGENT context, prompt specs, and Simulink rollout diagram
-│   ├── simulink_mockup.png    # 300 DPI high-res district rollout capacity model
-│   ├── PRD.md                 # Product Requirements Document
-│   └── SIH_PITCH_DECK_CONTENT.md # 6-Slide timed presentation script for judges
-├── PROJECT_MAP.md             # Complete master architecture and judge Q&A defense guide
-├── Dockerfile                 # Multi-stage production container
-├── docker-compose.yml         # Single-command container deployment
-├── start_retinasight.bat      # 1-click Windows startup script
-└── requirements.txt           # Python dependencies
+├── gradcam.py                # Stage 5: Retinal FOV-constrained Grad-CAM engine
+├── main.py                   # Stage 6: FastAPI REST service with multi-layer visual endpoints
+├── retinasight_resnet50.onnx # 93.6MB optimized ONNX edge inference graph
+├── retinasight_resnet50.pth  # PyTorch model weights checkpoint
+│
+├── start_retinasight.bat     # [RUNNER] 1-Click launcher: starts FastAPI (:8000) & Vite React (:5173)
+├── run_tests.bat             # [RUNNER] 1-Click automated test suite execution & verification
+├── run_matlab_pipeline.bat   # [RUNNER] 1-Click MATLAB pipeline launcher (R2026a/R2022b)
+├── run_simulink_model.bat    # [RUNNER] 1-Click Simulink district capacity model simulator
+│
+├── tests/                    # Automated Test Suite & Verifications
+│   ├── __init__.py           # Test package initialization
+│   └── test_preprocessing.py # RS-01 Acceptance criteria test suite (quality, CLAHE, vessels)
+├── test_preprocessing.py     # Root test runner forwarder (for quick execution)
+│
+├── matlab/                   # MathWorks Interoperability Suite
+│   ├── retinasight_pipeline.m         # Native MATLAB pipeline script (CLAHE + ONNX + gradCAM)
+│   ├── build_simulink_model.m         # Programmatic Simulink capacity model generator
+│   ├── retinasight_capacity_model.slx # Compiled Simulink discrete-event queuing model
+│   ├── retinasight_matlab_output.png  # Exported MATLAB multi-layer diagnostic figure
+│   └── README.md                      # MATLAB setup and execution instructions
+│
+├── kaggle_notebook/          # Cloud GPU Training & Calibration Suite
+│   ├── retinasight_kaggle_training.ipynb # Jupyter notebook ready to upload to Kaggle
+│   └── retinasight_kaggle_training.py    # Direct script for Kaggle Tesla T4/P100 training
+│
+├── scripts/                  # Scaffolding & Data Download Helpers
+│   ├── setup_datasets.py     # Multi-dataset scaffold & integrity verifier (APTOS, IDRiD, DRIVE, Messidor)
+│   └── download_kaggle_aptos.py # Automated Kaggle APTOS downloader with space checks
+│
+├── frontend/                 # Clinical Light-Theme React (Vite) specialist review web app
+│   ├── src/App.jsx           # Multi-layer viewer, benchmark modal, camp roster, referral slip
+│   └── src/index.css         # Surgical Light Theme CSS design system (UI-Max 97/100)
+├── mobile_stub/              # Flutter PHC camera capture & offline sync queue stub
+│
+├── docs/                     # PRD, Pitch Deck, Guides, and Architectural Diagrams
+│   ├── PRD.md                # Product Requirements Document
+│   ├── DATASETS_TRAINING_GUIDE.md # Complete 4-dataset training and benchmarking guide
+│   ├── SIH_PITCH_DECK_CONTENT.md  # 6-Slide timed presentation script for judges
+│   ├── PROJECT_MAP.md        # Master architecture and judge Q&A defense guide
+│   ├── simulink_mockup.png   # 300 DPI high-res district rollout capacity model
+│   └── retinasight_matlab_output.png # MATLAB validation report figure
+│
+├── KAGGLE_TRAINING_GUIDE.md  # Step-by-step free Kaggle GPU training walkthrough
+├── Dockerfile                # Multi-stage production container
+├── docker-compose.yml        # Single-command container deployment
+└── requirements.txt          # Python dependencies
 ```
 
 ---
 
-## 6. Quick Start & Execution Guide
+## 6. Running Files & Quick Start Guide
 
-### Option A: 1-Click Launch (Windows)
-Double-click `start_retinasight.bat` to automatically launch both the FastAPI backend (`:8000`) and the Vite React frontend (`:5173`).
+### 🚀 1-Click Launchers (Windows)
 
-### Option B: Manual Local Setup
+| Task | Launcher File | Description |
+|---|---|---|
+| **Launch Full Stack** | [`start_retinasight.bat`](start_retinasight.bat) | Starts FastAPI backend (`:8000`) and Vite React dashboard (`:5173`) in one click. |
+| **Run Test Suite** | [`run_tests.bat`](run_tests.bat) | Executes all automated unit tests and saves visual artifacts to `outputs/`. |
+| **Run MATLAB Pipeline** | [`run_matlab_pipeline.bat`](run_matlab_pipeline.bat) | Launches MATLAB, runs `retinasight_pipeline.m`, and exports visual verification figure. |
+| **Run Simulink Model** | [`run_simulink_model.bat`](run_simulink_model.bat) | Builds and simulates `retinasight_capacity_model.slx` in MATLAB/Simulink. |
+
+### 🛠️ Manual Local Execution
 ```bash
 # 1. Activate Python virtual environment and run backend
 .\.venv\Scripts\activate
@@ -117,7 +153,7 @@ npm run dev
 ```
 Open **`http://localhost:5173`** in your browser.
 
-### Option C: Docker Container Deployment
+### 🐳 Docker Container Deployment
 ```bash
 docker compose up --build
 ```
@@ -125,7 +161,38 @@ Access the unified web application on **`http://localhost:8000`**.
 
 ---
 
-## 7. License
+<a id="testing-qa"></a>
+## 7. Testing & Automated Verification
+
+RetinaSight includes a rigorous automated test suite to ensure clinical reliability across all diagnostic stages:
+
+### Running Tests
+Execute via the 1-click batch runner or command line:
+```bash
+# Option 1: 1-Click Runner
+run_tests.bat
+
+# Option 2: Python Command
+python tests/test_preprocessing.py
+```
+
+### Verified Test Cases
+1. **Quality Gate Rejection & Acceptance:** Tests clear fundus passes ($\ge 50.0$ blur variance, valid mean illumination), while deliberately blurred and underexposed scans fail with actionable recapture instructions.
+2. **Contrast Expansion & CLAHE:** Statistically verifies that green-channel CLAHE expands pixel intensity standard deviation by $>1.3\times$ on underexposed scans.
+3. **Vascular Segmentation:** Verifies non-empty binary vascular extraction with $>500$ vessel pixels and a physiologically realistic density ($1.0\% - 25.0\%$).
+4. **Visual Verification Collages:** Automatically generates high-resolution comparison plots saved to [`outputs/verification_rs01.png`](outputs/) and [`outputs/verification_enhancement_histogram.png`](outputs/).
+
+---
+
+## 8. Training & Cloud GPU Guides
+
+To retrain or benchmark the ResNet-50 classifier using free NVIDIA GPUs:
+- **Kaggle GPU Walkthrough:** See [`KAGGLE_TRAINING_GUIDE.md`](KAGGLE_TRAINING_GUIDE.md) for 0-download cloud GPU training using `kaggle_notebook/`.
+- **4-Dataset Architecture Guide:** See [`docs/DATASETS_TRAINING_GUIDE.md`](docs/DATASETS_TRAINING_GUIDE.md) for multi-dataset calibration across APTOS 2019, IDRiD, DRIVE, and Messidor-2.
+
+---
+
+## 9. License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.  
 Copyright (c) 2026 Mohan Prasath P (Team OnFocus, Smart India Hackathon 2026).

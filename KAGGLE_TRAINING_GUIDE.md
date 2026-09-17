@@ -9,9 +9,9 @@ This guide shows you how to train our deep learning model on Kaggle's free **NVI
 ## 📁 Files Provided in Your Repository
 
 1. **Jupyter Notebook (Ready to Upload):**  
-   [`kaggle_notebook/retinasight_kaggle_training.ipynb`](file:///d:/SIH2026/retinasight/kaggle_notebook/retinasight_kaggle_training.ipynb)
+   [`kaggle_notebook/retinasight_kaggle_training.ipynb`](kaggle_notebook/retinasight_kaggle_training.ipynb)
 2. **Python Script (Direct Copy-Paste):**  
-   [`kaggle_notebook/retinasight_kaggle_training.py`](file:///d:/SIH2026/retinasight/kaggle_notebook/retinasight_kaggle_training.py)
+   [`kaggle_notebook/retinasight_kaggle_training.py`](kaggle_notebook/retinasight_kaggle_training.py)
 
 ---
 
@@ -40,13 +40,11 @@ This guide shows you how to train our deep learning model on Kaggle's free **NVI
 Choose either **Option A** or **Option B**:
 
 #### Option A (Upload Notebook):
-
 1. In the top Kaggle menu, click **File** -> **Upload Notebook**.
-2. Select the file: `d:\SIH2026\retinasight\kaggle_notebook\retinasight_kaggle_training.ipynb`.
+2. Select the file: `kaggle_notebook/retinasight_kaggle_training.ipynb` from your repository.
 
 #### Option B (Copy & Paste):
-
-1. Open [`kaggle_notebook/retinasight_kaggle_training.py`](file:///d:/SIH2026/retinasight/kaggle_notebook/retinasight_kaggle_training.py).
+1. Open [`kaggle_notebook/retinasight_kaggle_training.py`](kaggle_notebook/retinasight_kaggle_training.py).
 2. Copy all code.
 3. Paste it into the first cell of your Kaggle notebook.
 
@@ -86,8 +84,8 @@ When training completes, look at the right sidebar under **Output** (`/kaggle/wo
 ### Step 6: Deploy into Your Local Project
 
 1. Move both downloaded files into your local project root directory:
-   - `d:\SIH2026\retinasight\retinasight_resnet50.onnx`
-   - `d:\SIH2026\retinasight\retinasight_resnet50.pth`
+   - `retinasight_resnet50.onnx`
+   - `retinasight_resnet50.pth`
 2. Restart your local RetinaSight server:
-   - Double-click [`start_retinasight.bat`](file:///d:/SIH2026/retinasight/start_retinasight.bat)
+   - Double-click [`start_retinasight.bat`](start_retinasight.bat)
 3. Both the FastAPI API (`http://127.0.0.1:8000`) and the Web Dashboard (`http://localhost:5173`) will instantly use the new high-accuracy GPU-trained model!

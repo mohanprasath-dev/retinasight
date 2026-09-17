@@ -93,7 +93,7 @@ Because Problem Statement 26038 is sponsored by MathWorks, RetinaSight was speci
   % Native MATLAB Grad-CAM
   scoreMap = gradCAM(net, inputImage, predictedClass, 'FeatureLayer', 'layer4');
   ```
-- **Executable Script:** Located at [`matlab/retinasight_pipeline.m`](file:///d:/SIH2026/retinasight/matlab/retinasight_pipeline.m) with full documentation in [`matlab/README.md`](file:///d:/SIH2026/retinasight/matlab/README.md).
+- **Executable Script:** Located at [`matlab/retinasight_pipeline.m`](matlab/retinasight_pipeline.m) with full documentation in [`matlab/README.md`](matlab/README.md).
 
 ---
 
