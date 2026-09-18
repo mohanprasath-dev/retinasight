@@ -22,6 +22,16 @@ function results = retinasight_pipeline(imagePath, modelPath)
 	%% -------------------------------------------------------------------------
 	%% Resolve Default Paths
 	%% -------------------------------------------------------------------------
+	if nargin >= 1 && (strcmpi(imagePath, 'browse') || strcmpi(imagePath, 'ui') || strcmpi(imagePath, 'select'))
+		[fName, fPath] = uigetfile({'*.png;*.jpg;*.jpeg;*.tif;*.bmp', 'Fundus Retinal Scans (*.png, *.jpg, *.tif)'}, 'Select Patient Fundus Image');
+		if isequal(fName, 0)
+			fprintf('[INFO] File selection canceled by user.\n');
+			results.status = 'canceled';
+			return;
+		end
+		imagePath = fullfile(fPath, fName);
+	end
+
 	if nargin < 1 || isempty(imagePath)
 		candidatePaths = {
 			fullfile('..', 'frontend', 'public', 'samples', 'sample_aptos_grade2.png'), ...

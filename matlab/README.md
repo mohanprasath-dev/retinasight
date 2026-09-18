@@ -34,6 +34,9 @@ This automatically launches MATLAB R2026a, navigates to the `matlab/` directory,
    ```
 3. To test with specific patient fundus images:
    ```matlab
+   % Interactive File Picker (Select ANY image from your computer):
+   results = retinasight_pipeline('browse');
+
    % Grade 0 (Normal / No DR)
    results = retinasight_pipeline('../frontend/public/samples/sample_messidor_grade0.png');
 
@@ -45,6 +48,9 @@ This automatically launches MATLAB R2026a, navigates to the `matlab/` directory,
 
    % Grade 4 (Proliferative DR)
    results = retinasight_pipeline('../frontend/public/samples/sample_proliferative_grade4.png');
+
+   % Low-Quality Blur/Dark (Demonstrates Quality Gate Rejection in MATLAB)
+   results = retinasight_pipeline('../frontend/public/samples/fundus_blurry.png');
    ```
 
 ---
