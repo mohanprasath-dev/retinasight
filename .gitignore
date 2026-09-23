@@ -58,6 +58,7 @@ mobile_stub/build/
 *.pth
 *.pt
 *.onnx
+*.mat
 outputs/
 *.h5
 cache/

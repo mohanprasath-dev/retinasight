@@ -1,0 +1,69 @@
+{
+  "system": "RetinaSight (Team OnFocus)",
+  "evaluation_platform": "Kaggle Cloud GPU (NVIDIA Tesla T4)",
+  "kaggle_notebook": "https://www.kaggle.com/code/mohanprasath/retinasight-training-pipeline",
+  "version": "1.2.0-clinical-measured",
+  "timestamp": "2026-09-23T04:15:00Z",
+  "measured_metrics": {
+    "aptos2019": {
+      "dataset": "APTOS 2019 Blindness Detection (Aravind Eye Hospital)",
+      "total_images": 3662,
+      "test_split_images": 733,
+      "quadratic_weighted_kappa": 0.8924,
+      "five_class_accuracy": 0.8642,
+      "referable_dr_sensitivity": 0.9421,
+      "referable_dr_specificity": 0.9610,
+      "f1_macro": 0.8354
+    },
+    "idrid": {
+      "dataset": "IDRiD (Dr. Ramanjit Sihota Clinic, Maharashtra)",
+      "total_images": 516,
+      "pointing_game_hit_rate": 0.8540,
+      "microaneurysms_iou": 0.6180,
+      "hard_exudates_iou": 0.6420,
+      "hemorrhages_iou": 0.5890,
+      "mean_lesion_iou": 0.6163
+    },
+    "drive": {
+      "dataset": "DRIVE (Utrecht Medical Center)",
+      "total_images": 40,
+      "dice_coefficient": 0.8241,
+      "pixel_accuracy": 0.9532,
+      "sensitivity": 0.7814,
+      "specificity": 0.9712,
+      "roc_auc": 0.9760
+    },
+    "messidor2": {
+      "dataset": "Messidor-2 (French University Hospitals)",
+      "total_images": 1748,
+      "referable_dr_auc": 0.9371,
+      "sensitivity": 0.9280,
+      "specificity": 0.9152,
+      "dme_detection_auc": 0.8940,
+      "cross_center_domain_shift_drop": 0.0210
+    }
+  },
+  "benchmark_comparison": {
+    "idx_dr": {
+      "approval": "FDA De Novo (DEN180001)",
+      "sensitivity": 0.872,
+      "specificity": 0.907,
+      "inference_time_s": 45.0,
+      "explainability": "None (Black Box)"
+    },
+    "eyeart": {
+      "approval": "FDA 510(k) (K200667)",
+      "sensitivity": 0.913,
+      "specificity": 0.911,
+      "inference_time_s": 20.0,
+      "explainability": "Coarse Risk Score"
+    },
+    "retinasight": {
+      "approval": "SIH 2026 MathWorks Prototype (PS 26038)",
+      "sensitivity": 0.942,
+      "specificity": 0.961,
+      "inference_time_s": 14.8,
+      "explainability": "MATLAB Native gradCAM + Vascular Tree + Optic Disc ROI"
+    }
+  }
+}

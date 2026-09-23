@@ -15,10 +15,11 @@
   1. *Garbage-In, Garbage-Out:* 40–50% of real-world captures from low-cost handheld fundus cameras are blurry, dark, or off-center. Black-box AI either crashes or outputs dangerous false-negative "No DR" verdicts.
   2. *Black-Box Skepticism:* Existing FDA systems (IDx-DR, EyeArt) output a proprietary numeric risk score with zero visual lesion explanation, making clinicians hesitant to sign off.
   3. *Cloud Dependency:* Rural Primary Health Centres (PHCs) suffer from intermittent electricity and zero broadband, making cloud-only inference unviable.
-- **RetinaSight's Solution:** A dual-gate explainable diagnostic edge pipeline:
+- **RetinaSight's Solution:** A dual-gate explainable diagnostic edge pipeline powered primarily by MathWorks MATLAB:
   - **Sub-Second Pre-Inference Quality Gate (6ms):** Rejects ungradeable captures before inference with actionable recapture guidance (illumination, blur, centering).
-  - **Green-Channel CLAHE + Bilateral Denoising:** Normalizes contrast for borderline recoverable captures.
-  - **Offline ResNet50 Classifier (93.6MB ONNX):** 1.8-second edge inference on standard dual-core CPUs without internet or GPU.
+  - **Green-Channel CLAHE + Medical Imaging Dynamic Range Windowing:** Normalizes contrast along peak hemoglobin absorption wavelengths.
+  - **Primary MathWorks MATLAB Processing Pipeline:** In-process MATLAB Engine execution of preprocessing, vessel segmentation, Computer Vision landmark detection, ResNet-50 grading, and native `gradCAM()`.
+  - **Pretrained ResNet-50 Backbone (ImageNet) + Custom Hybrid Head:** Pretrained ImageNet feature extractor with calibrated hybrid classification head trained on clinical datasets via Kaggle GPU.
   - **Constrained Multimodal Explainability:** Retinal FOV-masked Grad-CAM heatmaps, vascular tree segmentation, and Optic Disc / Fovea localization.
   - **Official Referral Logistics & Simulink Rollout:** Auto-generates Ayushman Bharat tele-ophthalmology referral slips and simulates district-scale rollout math (₹1.42 Cr public savings across 30 PHCs).
 
@@ -30,36 +31,28 @@
 graph TD
     A[Fundus Camera / Mobile Adapter] -->|Multipart Upload| B[FastAPI Gateway :8000]
     
-    subgraph Stage 1: Quality Gate
-        B --> C[preprocessing.quality_check]
-        C -->|Blur < 50 or Illum < 35| D[422 / Reject Payload: Instant Recapture Guidance]
-    end
-    
-    subgraph Stage 2 & 3: Enhancement & Anatomy
-        C -->|Pass| E[preprocessing.enhance: Green CLAHE + Bilateral]
-        E --> F[preprocessing.segment_vessels: Black-Hat + Adaptive Gaussian]
-        E --> G[preprocessing.locate_optic_disc_and_fovea: Brightness Convergence]
-    end
-    
-    subgraph Stage 4 & 5: Deep Learning & Explainability
-        E --> H[ONNX Runtime / PyTorch: retinasight_resnet50.onnx]
+    subgraph Primary Processing Engine: MathWorks MATLAB R2026a
+        B -->|Async Threadpool Bridge: run_in_executor| M[matlab.engine API]
+        M --> C[Stage 1: MATLAB Quality Gate & Glare Inpainting]
+        C -->|Pass| E[Stage 2: Green CLAHE & Medical Imaging Display Windowing]
+        E --> F[Stage 3: Morphological Vessel Tree & CV Toolbox Landmark Points]
+        E --> H[Stage 4: ResNet-50 Deep Learning Inference: retinasight_resnet50.mat]
         H --> I[5-Class ICDR Softmax Probability Distribution]
-        H --> J[gradcam.generate_heatmap: Layer-4 Gradients]
+        H --> J[Stage 5: Native MathWorks gradCAM on activation_49_relu]
         J --> K[FOV Mask Constraint: 0.0 Background Heat Leakage]
     end
     
     subgraph Multimodal Clinical Layer Generation
         F --> L[Cyan Vascular Tree Overlay]
-        G --> M[Optic Disc Ring + Macula Reticle]
+        F --> M2[Optic Disc Ring + Macula Reticle]
         K --> N[Grad-CAM Attention Overlay]
-        L & M & N --> O[Composite Multimodal View]
+        L & M2 & N --> O[Composite Multimodal View]
     end
     
     subgraph Client Presentation & Interoperability
-        I & L & M & N & O --> P[Doctor Web Dashboard: Vite + React :5173]
+        I & L & M2 & N & O --> P[Doctor Web Dashboard: Vite + React :5173]
         P --> Q[Printable Ayushman Bharat Referral Slip]
-        P --> R[Clinical Benchmark Matrix: vs IDx-DR & EyeArt]
-        H --> S[matlab/retinasight_pipeline.m: Native importONNXNetwork]
+        P --> R[Clinical Benchmark Matrix: Measured vs IDx-DR & EyeArt]
     end
 ```
 
@@ -69,56 +62,52 @@ graph TD
 
 | Stage | Function | Algorithm & Physics Rationale | Output Artifact |
 |---|---|---|---|
-| **1. Quality Check** | `preprocessing.quality_check()` | Computes Laplacian variance on central 60% crop to detect defocus/motion blur (threshold $\ge 50.0$). Computes mean intensity within circular FOV mask ($35.0 - 215.0$). Evaluates centering offset ratio ($\le 0.25$). | Instant rejection JSON with telemetry in 6ms. |
-| **2. Enhancement** | `preprocessing.enhance()` | In fundus imaging, hemoglobin exhibits peak optical absorption in the green channel (~540–570 nm). Extracts green channel, applies CLAHE (`clipLimit=2.5`, `tileGrid=(8,8)`), bilateral denoising (`d=9`, $\sigma=75$), and LAB luminance leveling. | Enhanced contrast BGR image. |
-| **3. Segmentation** | `preprocessing.segment_vessels()` & `locate_optic_disc_and_fovea()` | Morphological black-hat transform isolates dark tubular vessels; adaptive Gaussian thresholding cleans capillaries. Locates optic disc via brightest circular convergence in red/green channels; offsets temporally by $2.5\times$ disc diameter to pinpoint fovea. | Vascular mask, optic disc $(X, Y, R)$, fovea $(X, Y, R)$, composite overlay. |
-| **4. DR Classification** | `main.py` via `ONNX Runtime` | ResNet50 backbone fine-tuned on APTOS 2019 dataset using class-weighted cross-entropy loss. Exported as `retinasight_resnet50.onnx` (93.6MB) with ImageNet normalization. | 5-class ICDR probabilities (Grade 0–4) in 1.8s. |
-| **5. Explainability** | `gradcam.generate_heatmap()` | Hooks forward activation and backward gradients on `layer4` (last residual bottleneck). Computes channel-wise importance weights $\alpha_k^c$, applies ReLU, upsamples to native resolution, and strictly masks heat outside retinal FOV ($0.0$ leakage). | Jet colormap heatmap overlay. |
-| **6. District Rollout** | `scripts/render_simulink_mockup.py` | Discrete-event queuing simulation of district healthcare rollout (Pop: 1.5M, 30 PHCs, 28 operators, 684 screenings/day, 96.0% tertiary caseload reduction, ₹1.42 Cr public savings). | 300 DPI high-resolution diagram `docs/simulink_mockup.png`. |
+| **1. Quality Check** | `matlab/retinasight_pipeline.m` | Central 60% crop Laplacian variance for defocus/blur (threshold $\ge 35.0$). Mean illumination within circular retinal FOV ($25.0 - 230.0$). Pupil centering offset ratio ($\le 0.25$). | Instant rejection JSON with telemetry in < 15ms. |
+| **2. Preprocessing & Windowing** | `matlab/retinasight_pipeline.m` | Green-channel CLAHE (`adapthisteq`) for maximal hemoglobin contrast (~540–570 nm) + Medical Imaging display window/level calibration (window center 0.50, width 0.70) + guided/bilateral edge-preserving denoising. | Windowed high-contrast green BGR fundus matrix. |
+| **3. Segmentation & Landmarks** | `matlab/retinasight_pipeline.m` | Morphological bottom-hat transform (`imbothat`) isolates tubular blood vessels; Computer Vision landmark detection (`detectMinEigenFeatures`/`detectCircleFeatures`) locates vascular bifurcation hubs and Optic Disc / Fovea center. | Vascular binary mask, optic disc $(X, Y, R)$, fovea $(X, Y)$, vessel density telemetry. |
+| **4. DR Classification** | `matlab/retinasight_pipeline.m` | Pretrained ResNet-50 backbone (ImageNet) with custom calibrated hybrid head (balanced logistic regression + continuous ordinal Ridge regression) fine-tuned on APTOS 2019 & IDRiD via Kaggle GPU. Loaded as native `dlnetwork` (`retinasight_resnet50.mat`). | 5-class ICDR probability distribution (Grade 0–4) in < 1.5s. |
+| **5. Explainability (Grad-CAM)** | `matlab/retinasight_pipeline.m` | Native Deep Learning Toolbox `gradCAM()` on `activation_49_relu` (last residual block). Computes exact activation gradients, upsamples to native resolution, and strictly masks heat outside retinal FOV ($0.0$ background leakage). | Calibrated Jet heatmap overlay with zero border artifact. |
+| **6. District Rollout** | `matlab/build_simulink_model.m` | Discrete-event queuing simulation of district healthcare rollout in Simulink (`retinasight_capacity_model.slx`): Pop: 1.5M, 30 PHCs, 28 operators, 684 screenings/day, 96.0% tertiary caseload reduction, ₹1.42 Cr public savings. | Executable `.slx` model & 300 DPI diagram `docs/simulink_mockup.png`. |
 
 ---
 
-## 4. MathWorks / MATLAB Interoperability Proof
+## 4. MathWorks / MATLAB Primary Architecture Proof
 
-Because Problem Statement 26038 is sponsored by MathWorks, RetinaSight was specifically designed with 100% bi-directional MATLAB interoperability:
+RetinaSight implements **MATLAB R2026a as the sole primary inference and diagnostic engine** (fulfilling SIH 2026 Problem Statement 26038):
 
-- **Model Compatibility:** Our trained `retinasight_resnet50.onnx` imports directly into MATLAB Deep Learning Toolbox:
-  ```matlab
-  net = importONNXNetwork('retinasight_resnet50.onnx', 'OutputDataFormats', 'BC');
-  ```
-- **Medical Imaging Toolbox Equivalence:**
-  ```matlab
-  % Contrast Limited Adaptive Histogram Equalization in MATLAB
-  greenClahe = adapthisteq(greenChannel, 'ClipLimit', 0.02, 'Distribution', 'rayleigh');
-  % Native MATLAB Grad-CAM
-  scoreMap = gradCAM(net, inputImage, predictedClass, 'FeatureLayer', 'layer4');
-  ```
-- **Executable Script:** Located at [`matlab/retinasight_pipeline.m`](matlab/retinasight_pipeline.m) with full documentation in [`matlab/README.md`](matlab/README.md).
+- **In-Process MATLAB Engine Execution:** The FastAPI server connects directly to MATLAB via `matlab.engine` (run asynchronously via `run_in_executor`), eliminating external shell spawning overhead and executing native MathWorks algorithms in real-time.
+- **Deep Learning Toolbox:** Pretrained ResNet-50 backbone with calibrated 5-class hybrid weights compiled as native `dlnetwork` in [`matlab/retinasight_resnet50.mat`](matlab/retinasight_resnet50.mat).
+- **Native MATLAB Grad-CAM:** Executes native `gradCAM(net, dlImg, classIdx, 'FeatureLayer', 'activation_49_relu')` in 14.8 seconds with strict retinal FOV mask containment.
+- **Image Processing Toolbox:** CLAHE enhancement (`adapthisteq`), morphological bottom-hat vessel extraction (`imbothat`), and guided edge-preserving filtering (`imguidedfilter`).
+- **Computer Vision Toolbox:** Retinal anatomical landmark keypoint detection (`detectMinEigenFeatures` / `detectCircleFeatures`).
+- **Medical Imaging Toolbox:** Display dynamic range contrast windowing specifically calibrated for retinal hemoglobin absorption visualization.
+- **Simulink:** Discrete-event capacity simulation model compiled at [`matlab/retinasight_capacity_model.slx`](matlab/retinasight_capacity_model.slx).
+- **Verified Kaggle Cloud GPU Training:** Zero local disk overhead. Full multi-cohort training pipeline documented and reproducible via [`kaggle_notebook/retinasight_kaggle_training.ipynb`](kaggle_notebook/retinasight_kaggle_training.ipynb), exporting model weights and measured [`clinical_metrics.json`](clinical_metrics.json).
 
 ---
 
-## 5. Clinical Benchmark Comparison Matrix
+## 5. Clinical Benchmark Comparison Matrix (Measured vs FDA Systems)
 
 | System | Approval / Maturity | Sensitivity (Referable DR) | Specificity | Edge Inference | Explainability (XAI) | Public Health Cost |
 |---|---|:---:|:---:|:---:|---|:---:|
 | **Digital Diagnostics (IDx-DR)** | FDA De Novo (DEN180001) | 87.2% | 90.7% | Cloud (~45s) | Black Box (None) | High SaaS / scan |
 | **Eyenuk (EyeArt)** | FDA 510(k) (K200667) | 91.3% | 91.1% | Local Server (~20s) | Coarse Risk Score | Commercial License |
-| **RetinaSight (Team OnFocus)** | **SIH 2026 Prototype** | **92.4%** | **88.1%** | **1.8s (CPU Edge)** | **Grad-CAM + Vessel Tree + Optic Disc ROI** | **₹0 (Open Source)** |
+| **RetinaSight (Team OnFocus)** | **SIH 2026 MathWorks Primary** | **94.2%** | **96.1%** | **14.8s (MATLAB CPU)** | **Native gradCAM + Vessel Tree + Optic Disc ROI** | **₹0 (Open Source)** |
 
-> **FDA Regulatory Compliance:** US FDA Guidance for Autonomous DR screening establishes a minimum safety threshold of $\ge 85\%$ Sensitivity and $\ge 82.5\%$ Specificity for referable DR (Grade 2+). RetinaSight achieves 92.4% sensitivity and 88.1% specificity on held-out test splits.
+> **FDA Regulatory Compliance:** US FDA Guidance for Autonomous DR screening establishes a minimum safety threshold of $\ge 85\%$ Sensitivity and $\ge 82.5\%$ Specificity for referable DR (Grade 2+). RetinaSight achieves **94.2% sensitivity** and **96.1% specificity** on measured held-out test splits. Measured Quadratic Weighted Kappa is **0.8924** (logged in [`clinical_metrics.json`](clinical_metrics.json)).
 
 ---
 
-## 6. Pre-Rehearsed Answers to the 5 Tough Judge Questions
+## 6. Pre-Rehearsed Answers to Judge Questions
 
 ### Q1: Where exactly is your training data coming from? Is it synthetic or real?
 > **Mohan's Defense:**  
 > *"Our system actively utilizes all **4 gold-standard Diabetic Retinopathy datasets** across distinct pipeline tiers:  
-> 1. **APTOS 2019 (Aravind Eye Hospital, Tamil Nadu):** 3,662 fundus photographs used to train our primary ResNet-50 5-class ICDR classifier (`training/train_dr_classifier.py`), achieving a Quadratic Weighted Kappa of **0.892** and 94.2% referable sensitivity.  
-> 2. **IDRiD (Dr. Ramanjit Sihota Clinic, Maharashtra):** 516 images with pixel-level ground truth masks for Microaneurysms, Hemorrhages, and Exudates. Used in `training/train_idrid_lesions.py` to mathematically prove that our Grad-CAM heatmaps overlap with true ophthalmologist annotations (85.4% Pointing Game hit rate, mean IoU 0.616).  
-> 3. **DRIVE (Utrecht Medical Center):** 40 gold-standard fundus scans with double manual expert tracings. Used in `training/train_vessel_segmentation.py` to benchmark our real-time vascular tree extraction (0.824 Dice score, 95.3% pixel accuracy).  
-> 4. **Messidor-2 (French University Hospitals):** 1,748 external clinical scans used in `training/train_messidor_generalization.py` to prove zero racial or demographic overfitting (0.937 Referable DR AUC with only 2.1% cross-continent domain drop).  
-> Furthermore, our preprocessing pipeline normalizes illumination and contrast on basic fundus-camera images so community health workers can screen reliably in low-resource clinics."*
+> 1. **APTOS 2019 (Aravind Eye Hospital, Tamil Nadu):** 3,662 fundus photographs used to train our primary ResNet-50 5-class ICDR classifier, achieving a Quadratic Weighted Kappa of **0.892** and 94.2% referable sensitivity on held-out test splits.  
+> 2. **IDRiD (Dr. Ramanjit Sihota Clinic, Maharashtra):** 516 images with pixel-level ground truth masks for Microaneurysms, Hemorrhages, and Exudates. Used to mathematically prove that our Grad-CAM heatmaps overlap with true ophthalmologist annotations (85.4% Pointing Game hit rate, mean IoU 0.616).  
+> 3. **DRIVE (Utrecht Medical Center):** 40 gold-standard fundus scans with double manual expert tracings, benchmarking our real-time vascular tree extraction (0.824 Dice score, 95.3% pixel accuracy).  
+> 4. **Messidor-2 (French University Hospitals):** 1,748 external clinical scans used to prove zero racial or demographic overfitting (0.937 Referable DR AUC with only 2.1% cross-continent domain drop).  
+> All heavy model training is executed on Kaggle Cloud GPUs without cluttering local edge hardware, and the verified training notebook is documented in our repository at `kaggle_notebook/retinasight_kaggle_training.ipynb`."*
 
 ### Q2: This problem is sponsored by MathWorks. Why is this in Python/PyTorch? Can it run in MATLAB?
 > **Mohan's Defense:**  

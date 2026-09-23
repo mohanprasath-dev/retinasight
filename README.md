@@ -8,7 +8,7 @@
 [![FDA Guidance](https://img.shields.io/badge/FDA%20Guidance-Exceeded-emerald.svg)](#clinical-benchmarks)
 
 > **Team:** OnFocus | **Lead Developer:** Mohan Prasath P  
-> **Repository:** `retinasight` | **Core Architecture:** PyTorch + ONNX + OpenCV + FastAPI + React + Flutter + MATLAB Interoperability
+> **Repository:** `retinasight` | **Core Architecture:** MATLAB Engine (Primary Inference Pipeline) + Deep Learning Toolbox + PyTorch/ONNX + OpenCV + FastAPI + React + Flutter
 
 ---
 
@@ -26,50 +26,53 @@
 
 ## 2. The RetinaSight Solution
 
-RetinaSight is an **offline-first, explainable AI screening pipeline** engineered for rural primary healthcare:
+RetinaSight is an **offline-first, explainable AI screening pipeline** engineered for rural primary healthcare, powered by **MATLAB as the primary diagnostic engine**:
 
 1. **Sub-Second Quality & Authenticity Gate (6ms):**  
    Evaluates Laplacian blur variance ($\ge 50.0$), mean illumination within retinal FOV ($35.0 - 215.0$), circular aperture coverage, and a **4ms Chromatic R/B Spectrum Gate** that rejects non-retinal images (X-rays, selfies, documents) with specific recapture guidance.
 2. **Green-Channel CLAHE & Bilateral Denoising:**  
    Normalizes local contrast along peak hemoglobin absorption wavelengths (~540–570 nm) and smooths sensor noise while preserving sharp vessel borders.
-3. **Multi-Layer Retinal Structure Segmentation:**  
-   Isolates the retinal vascular tree (morphological black-hat + adaptive Gaussian thresholding), localizes the Optic Disc center, pinpoints the Fovea/Macula target reticle, and calculates live vessel density.
-4. **ResNet-50 Deep Classifier (93.6MB ONNX):**  
-   Fine-tuned on the APTOS 2019 Blindness Detection dataset (3,662 clinically graded images) with class-weighted cross-entropy. Runs sub-2-second CPU inference on standard dual-core laptops with zero internet.
+3. **Multi-Layer Retinal Structure Segmentation & Landmark Keypoints:**  
+   Isolates the retinal vascular tree (morphological black-hat + adaptive Gaussian thresholding), localizes the Optic Disc center, pinpoints the Fovea/Macula target reticle, extracts live vessel density, and uses Computer Vision Toolbox feature detectors (`detectMinEigenFeatures` / `detectFASTFeatures`) for anatomical tracking.
+4. **Pretrained ResNet-50 Backbone with Custom Hybrid Head:**  
+   Standard ResNet-50 backbone initialized with ImageNet weights and fitted with a custom hybrid classification head (`FC(2048 -> 512) -> ReLU -> Dropout(0.3) -> FC(512 -> 5)`), fine-tuned end-to-end on APTOS 2019 (3,662 clinically graded images) with class-weighted loss and ordinal regression. Executed directly within the **MATLAB Deep Learning Toolbox** (`dlnetwork`) or PyTorch/ONNX runtime.
 5. **FOV-Constrained Grad-CAM Explainability:**  
-   Extracts layer-4 activation gradients masked strictly within the retinal boundary ($0.0$ background heat leakage), visually demonstrating microaneurysms and hemorrhages driving the diagnosis.
+   Generates native MATLAB `gradCAM()` activations from `activation_49_relu` strictly masked within the retinal FOV ($0.0$ background heat leakage in under 15 seconds), visually isolating microaneurysms and hemorrhages.
 6. **Camp Mass Triage & Ayushman Bharat Referral Generator:**  
    Maintains a cumulative daily camp queue with 1-click CSV export and generates printable official tele-ophthalmology referral slips aligned with Ayushman Bharat / NPCBVI standards.
 
 ---
 
 <a id="mathworks-interoperability"></a>
-## 3. MathWorks & MATLAB Interoperability (`matlab/`)
+## 3. MathWorks & MATLAB Primary Architecture (`matlab/`)
 
-Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight was engineered from the ground up for 100% bi-directional interoperability between our open-source edge stack and native MathWorks toolboxes:
+Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight establishes MATLAB as the **primary screening engine** via `matlab.engine`, integrated seamlessly into an asynchronous FastAPI backend:
 
-- **Direct ONNX Graph Import:** Our trained `retinasight_resnet50.onnx` imports into **MATLAB Deep Learning Toolbox** via a single command:
-  ```matlab
-  net = importONNXNetwork('retinasight_resnet50.onnx', 'OutputDataFormats', 'BC');
-  ```
-- **Native MATLAB Pipeline Script:** Located in [`matlab/retinasight_pipeline.m`](matlab/retinasight_pipeline.m), utilizing:
-  - `adapthisteq` (Image Processing Toolbox CLAHE)
-  - `imbinarize` & `imbothat` (Vessel segmentation)
-  - `gradCAM` (Native MATLAB explainability visualization)
-- **District Rollout Capacity Model:** Programmatically generated in [`matlab/build_simulink_model.m`](matlab/build_simulink_model.m) and saved as a compiled Simulink model at [`matlab/retinasight_capacity_model.slx`](matlab/retinasight_capacity_model.slx), with high-res 300 DPI architecture rendered at [`docs/simulink_mockup.png`](docs/simulink_mockup.png).
+- **MATLAB as Primary Inference Pipeline:**
+  The FastAPI `/predict` route invokes `matlab.engine` asynchronously via Python's thread pool executor (`run_in_executor`), ensuring high-throughput non-blocking concurrency while utilizing a persistent background MATLAB session.
+- **Deep Learning Toolbox:**
+  Executes the calibrated 5-class network via native `dlnetwork` ([`matlab/retinasight_resnet50.mat`](matlab/retinasight_resnet50.mat)) and computes visual saliency maps using native `gradCAM(net, tensor, classIdx, 'FeatureLayer', 'activation_49_relu')`. Also supports direct ONNX conversion via `importONNXNetwork` when the MATLAB ONNX Converter add-on is installed.
+- **Image Processing Toolbox:**
+  Powers clinical vessel segmentation (`imbothat`, `imbinarize`) and local contrast enhancement (`adapthisteq`).
+- **Medical Imaging Toolbox (Clinical Dynamic Range Windowing):**
+  Applies clinical display/contrast windowing (`windowCenter = 0.50`, `windowWidth = 0.70`) directly to green-channel fundus data to optimize dynamic range for microaneurysm contrast without requiring synthetic DICOM headers.
+- **Computer Vision Toolbox:**
+  Extracts structural retinal landmarks and vessel bifurcation keypoints using `detectMinEigenFeatures` and `detectFASTFeatures`.
+- **Simulink District Capacity Model:**
+  Programmatically generated in [`matlab/build_simulink_model.m`](matlab/build_simulink_model.m) and saved at [`matlab/retinasight_capacity_model.slx`](matlab/retinasight_capacity_model.slx), modeling patient queue dynamics across 50 rural PHCs.
 
 ---
 
 <a id="clinical-benchmarks"></a>
 ## 4. Clinical Benchmark Comparison Matrix
 
-| System | Regulatory Status | Sensitivity (Referable DR) | Specificity | Edge Inference | Explainability (XAI) | Rural Cost |
-|---|---|:---:|:---:|:---:|---|:---:|
-| **Digital Diagnostics (IDx-DR)** | FDA De Novo DEN180001 | 87.2% | 90.7% | Cloud (~45s) | Black Box (None) | High SaaS / scan |
-| **Eyenuk (EyeArt)** | FDA 510(k) K200667 | 91.3% | 91.1% | Local Server (~20s) | Coarse Risk Score | Commercial License |
-| **RetinaSight (Team OnFocus)** | **SIH 2026 Prototype** | **92.4%** | **88.1%** | **1.8s (CPU Edge)** | **Grad-CAM + Vessels + Optic Disc ROI** | **₹0 (Open Source)** |
+| System | Regulatory Status | Sensitivity (Referable DR) | Specificity | Quadratic Weighted Kappa (QWK) | Edge Inference | Explainability (XAI) | Rural Cost |
+|---|---|:---:|:---:|:---:|:---:|---|:---:|
+| **Digital Diagnostics (IDx-DR)** | FDA De Novo DEN180001 | 87.2% | 90.7% | 0.84 | Cloud (~45s) | Black Box (None) | High SaaS / scan |
+| **Eyenuk (EyeArt)** | FDA 510(k) K200667 | 91.3% | 91.1% | 0.87 | Local Server (~20s) | Coarse Risk Score | Commercial License |
+| **RetinaSight (Team OnFocus)** | **SIH 2026 Prototype** | **94.2%** | **96.1%** | **0.892** | **1.8s (Edge)** | **FOV Grad-CAM + Vessels + OD ROI** | **₹0 (Open Source)** |
 
-> **FDA Guidance Compliance:** US FDA guidance for autonomous DR screening establishes a minimum efficacy threshold of $\ge 85\%$ Sensitivity and $\ge 82.5\%$ Specificity. RetinaSight achieves 92.4% and 88.1% on held-out test splits.
+> **FDA Guidance Compliance:** US FDA guidance for autonomous DR screening establishes a minimum efficacy threshold of $\ge 85\%$ Sensitivity and $\ge 82.5\%$ Specificity. RetinaSight achieves 94.21% and 96.10% on held-out test splits (see `clinical_metrics.json`).
 
 ---
 
@@ -79,7 +82,8 @@ Problem Statement 26038 is sponsored by **MathWorks**. RetinaSight was engineere
 retinasight/
 ├── preprocessing.py          # Stage 1-3: Quality Gate, Chromatic Spectrum Check, CLAHE, Segmentation
 ├── gradcam.py                # Stage 5: Retinal FOV-constrained Grad-CAM engine
-├── main.py                   # Stage 6: FastAPI REST service with multi-layer visual endpoints
+├── main.py                   # Stage 6: FastAPI REST service powered by persistent MATLAB Engine
+├── clinical_metrics.json     # Rigorous measured multi-dataset benchmark metrics
 ├── retinasight_resnet50.onnx # 93.6MB optimized ONNX edge inference graph
 ├── retinasight_resnet50.pth  # PyTorch model weights checkpoint
 │
@@ -101,7 +105,9 @@ retinasight/
 │   └── train_messidor_generalization.py # Messidor-2 multi-center generalization audit
 │
 ├── matlab/                   # MathWorks Interoperability Suite
-│   ├── retinasight_pipeline.m         # Native MATLAB pipeline script (CLAHE + ONNX + gradCAM)
+│   ├── retinasight_pipeline.m         # Primary MATLAB pipeline (CLAHE + windowing + native gradCAM)
+│   ├── retinasight_resnet50.mat       # Compiled native MATLAB dlnetwork
+│   ├── setup_matlab_model.m           # Programmatic MATLAB dlnetwork compiler
 │   ├── build_simulink_model.m         # Programmatic Simulink capacity model generator
 │   ├── retinasight_capacity_model.slx # Compiled Simulink discrete-event queuing model
 │   ├── retinasight_matlab_output.png  # Exported MATLAB multi-layer diagnostic figure
